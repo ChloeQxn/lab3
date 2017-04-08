@@ -17,5 +17,12 @@
 #include <stdio.h>
 int main() {
 	return 0;
-	
+	int i;
+	// read from 
+	void *buff = malloc(SECTORSIZE);
+	for (int i = 0; i < NUMSECTORS; i++) {
+		ReadSector(i, buff);
+		printf(buff);
+	}
 } 
+
