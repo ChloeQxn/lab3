@@ -13,6 +13,7 @@
 #include <comp421/filesystem.h>
 #include <comp421/iolib.h>
 #include <stdio.h>
+
  char free_inode[];
  int free_inode_count = 0;
  char free_block[];
@@ -20,18 +21,27 @@
  
 int main(int argc, char **argv) {
 	init();
+	if (Register(FILE_SERVER) == 0) {
+		fprintf(stderr, "Failed to initialize the service\n" );
+	}
+	TracePrintf(0, "Finished the register\n");
 	return 0;	
 } 
-void *getInode(i) {
-	int blockIndex = (i + 1) / (BLOCKSIZE/INODESIZE) + 1;
+struct inode *getInode(i) {
+	int blockIndex = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
 	void *buf = malloc(SECTORSIZE);
 	ReadSector(blockIndex, buf);
-	return buf;
+
+	struct inode* node = (struct inode*)malloc(sizeof(struct inode));
+	int offset = i % (BLOCKSIZE/INODESIZE);
+	memcpy(node, (struct inode*)buf + offset, sizeof(struct inode));
+	return node;
 }
 int init() {
+	TracePrintf(0, "Enter the init pocess...\n");
 	void *buf = malloc(SECTORSIZE);
 	ReadSector(1, buf);
-	struct fs_header *header= *buf;
+	struct fs_header *header= (struct fs_header *)getInode(0);
 	int block_num = header->num_blocks;
 	int inode_num = header->num_inodes;
 	int i = 1;
@@ -48,13 +58,14 @@ int init() {
 			free_block_count++;
 		} 
 	}
+	TracePrintf(0,"Initialize the free inode list\n");
 	/*
 	 * Use the array to store free inode, 0 means free, 1 means occupied
 	 */
 	free_inode[0] = 1;
 	for (; i < inode_num; i ++) {
 		struct inode *node = getInode(i);
-		if (node->type == INODE_FREE {
+		if (node->type == INODE_FREE) {
 			free_inode[i] = 0;
 			free_inode_count ++;
 		} else {
@@ -78,6 +89,6 @@ int init() {
 		
 
 		}
-		
 	}
+	TracePrintf(0, "Finish the init process\n");
 }
