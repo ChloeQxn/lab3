@@ -25,8 +25,64 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Failed to initialize the service\n" );
 	}
 	TracePrintf(0, "Finished the register\n");
+    if (argc>1) {
+    pid = Fork();
+    if (pid==0) {
+        Exec(argv[1],argv+1);
+    	}
+	}
+    while (1) {
+        if ((sender_pid=Receive(&myMsg))==ERROR) {
+//            perror("error receiving message!");
+            continue;
+        }
+        switch (myMsg.type) {
+            case OPEN:
+                open_handler(&myMsg,sender_pid);break;
+            /*
+            case CLOSE:
+                close_handler(&myMsg,sender_pid);break;
+            */
+            case CREATE:
+                create_handler(&myMsg,sender_pid);break;
+            case READ:
+                read_handler(&myMsg,sender_pid);break;
+            case WRITE:
+                write_handler(&myMsg,sender_pid);break;
+            /*
+            case SEEK:
+                seek_handler(&myMsg,sender_pid);break;
+            */
+            case LINK:
+                link_handler(&myMsg,sender_pid);break;
+            case UNLINK:
+                unlink_handler(&myMsg,sender_pid);break;
+            case SYMLINK:
+                symlink_handler(&myMsg,sender_pid);break;
+            case READLINK:
+                readlink_handler(&myMsg,sender_pid);break;
+            case MKDIR:
+                mkdir_handler(&myMsg,sender_pid);break;
+            case RMDIR:
+                rmdir_handler(&myMsg,sender_pid);break;
+            case CHDIR:
+                chdir_handler(&myMsg,sender_pid);break;
+            case STAT:
+                stat_handler(&myMsg,sender_pid);break;
+            case SYNC:
+                sync_handler(&myMsg);break;
+            case SHUTDOWN:
+                shutdown_handler(&myMsg,sender_pid);break;
+            default:
+                perror("message type error!");
+                break;
+        }
+        if (Reply(&myMsg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
+    }
+    terminate();
 	return 0;	
 } 
+
 struct inode *getInode(i) {
 	int blockIndex = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
 	void *buf = malloc(SECTORSIZE);
@@ -37,6 +93,7 @@ struct inode *getInode(i) {
 	memcpy(node, (struct inode*)buf + offset, sizeof(struct inode));
 	return node;
 }
+
 int init() {
 	TracePrintf(0, "Enter the init pocess...\n");
 	void *buf = malloc(SECTORSIZE);
