@@ -15,14 +15,16 @@
 #include <comp421/filesystem.h>
 #include <comp421/iolib.h>
 #include <stdio.h>
+#include <stdlib.h>
 int main() {
 	return 0;
 	int i;
 	// read from 
 	void *buff = malloc(SECTORSIZE);
-	for (int i = 0; i < NUMSECTORS; i++) {
+	int j = 5;
+	for (i = 0; i < NUMSECTORS; i++) {
 		ReadSector(i, buff);
-		printf(buff);
+		TracePrintf(0, "~~~~~~~~~~~~~~~~~~~%d", j);
 	}
 } 
 
