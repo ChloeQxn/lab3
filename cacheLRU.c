@@ -71,9 +71,9 @@ cacheBlock* get_hash_block(int b) {
 /*
  * Read block from cache by inode number 
  */
-void *readBlockCache(int i) {
+void *readBlockCache(int block_num) {
 	TracePrintf(0, "Read block cache\n");
-	int block_num = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
+	//int block_num = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
 	cacheBlock *block = get_hash_block(block_num);
 	if (block == NULL) {
 		return NULL; //no such inode stored in cache previously

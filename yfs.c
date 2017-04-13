@@ -39,66 +39,53 @@ int main(int argc, char **argv) {
 	        Exec(argv[1],argv+1);
 	    }
 	}
-	// TracePrintf(0, "Running the server process\n");
-	// int pid;
-	// my_msg msg;
- //    int senderPID;
-	// init();
-	// if (Register(FILE_SERVER) == ERROR) {
-	// 	fprintf(stderr, "Failed to initialize the service\n" );
-	// }
-	// TracePrintf(0, "Finished the register\n");
- //    if (argc>1) {
- //    	pid = Fork();
-	//     if (pid==0) {
-	//         Exec(argv[1],argv+1);
-	//     }
-	// }
-	// TracePrintf(0, "Running\n");
- //    while (1) {
- //        if ((senderPID=Receive(&myMsg))==ERROR) {
- //            perror("error receiving message!");
- //            continue;
- //        }
- //         switch (myMsg.type) {
- //             case OPEN:
- //                 open_handler(&msg,senderPID);break;
-//             case CREATE:
-//                 create_handler(&myMsg,sender_pid);break;
-//             case READ:
-//                 read_handler(&myMsg,sender_pid);break;
-//             case WRITE:
-//                 write_handler(&myMsg,sender_pid);break;
-//             case LINK:
-//                 link_handler(&myMsg,sender_pid);break;
-//             case UNLINK:
-//                 unlink_handler(&myMsg,sender_pid);break;
-//             case SYMLINK:
-//                 symlink_handler(&myMsg,sender_pid);break;
-//             case READLINK:
-//                 readlink_handler(&myMsg,sender_pid);break;
-//             case MKDIR:
-//                 mkdir_handler(&myMsg,sender_pid);break;
-//             case RMDIR:
-//                 rmdir_handler(&myMsg,sender_pid);break;
-//             case CHDIR:
-//                 chdir_handler(&myMsg,sender_pid);break;
-//             case STAT:
-//                 stat_handler(&myMsg,sender_pid);break;
-//             case SYNC:
-//                 sync_handler(&myMsg);break;
-//             case SHUTDOWN:
-//                 shutdown_handler(&myMsg,sender_pid);break;
-//             default:
-//                 perror("message type error!");
-//                 break;
- //        }
+	TracePrintf(0, "Running\n");
+    while (1) {
+        if ((senderPID=Receive(&myMsg))==ERROR) {
+            perror("error receiving message!");
+            continue;
+        }
+         switch (myMsg.type) {
+             case OPEN:
+                 open_handler(&msg,senderPID);break;
+            // case CREATE:
+            //     create_handler(&myMsg,sender_pid);break;
+            case READ:
+                read_handler(&myMsg,sender_pid);break;
+            // case WRITE:
+            //     write_handler(&myMsg,sender_pid);break;
+            // case LINK:
+            //     link_handler(&myMsg,sender_pid);break;
+            // case UNLINK:
+            //     unlink_handler(&myMsg,sender_pid);break;
+            // case SYMLINK:
+            //     symlink_handler(&myMsg,sender_pid);break;
+            // case READLINK:
+            //     readlink_handler(&myMsg,sender_pid);break;
+            // case MKDIR:
+            //     mkdir_handler(&myMsg,sender_pid);break;
+            // case RMDIR:
+            //     rmdir_handler(&myMsg,sender_pid);break;
+            // case CHDIR:
+            //     chdir_handler(&myMsg,sender_pid);break;
+            // case STAT:
+            //     stat_handler(&myMsg,sender_pid);break;
+            // case SYNC:
+            //     sync_handler(&myMsg);break;
+            // case SHUTDOWN:
+            //     shutdown_handler(&myMsg,sender_pid);break;
+            default:
+                perror("message type error!");
+                break;
+        }
 
-         // }
+         }
 //         if (Reply(&myMsg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
 //     }
 	return 0;	
 } 
+
+void read_handler()
 
 struct inode *getInode(i) {
 	TracePrintf(0, "Get inode function\n");
@@ -106,10 +93,9 @@ struct inode *getInode(i) {
 	if (inode != NULL) {
 		return inode;
 	}
-	
-	void *buf = readBlockCache(i);
+	int blockIndex = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
+	void *buf = readBlockCache(blockIndex);
 	if (buf == NULL) {
-		int blockIndex = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
 		TracePrintf(0, "Block is not in the cache%d \n", blockIndex);
 		buf = malloc(SECTORSIZE);
 		ReadSector(blockIndex, buf);
@@ -125,9 +111,17 @@ struct inode *getInode(i) {
 }
 
 // get the buff of the block with given block number
-void *getBlock(int i) {
-	void *buf = malloc(SECTORSIZE);
-	ReadSector(i, buf);
+void *getBlock(int blockIndex) {
+	// void *buf = malloc(SECTORSIZE);
+	// ReadSector(i, buf);
+	void *buf = readBlockCache(blockIndex);
+	if (buf == NULL) {
+		TracePrintf(0, "Block is not in the cache%d \n", blockIndex);
+		buf = malloc(SECTORSIZE);
+		ReadSector(blockIndex, buf);
+		TracePrintf(0, "Read the sector from blockIndex %d \n", blockIndex);
+		putBlockCache(buf, blockIndex);
+	}
 	return buf;
 }
 
