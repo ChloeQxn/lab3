@@ -13,8 +13,9 @@
 #include <comp421/filesystem.h>
 #include <comp421/iolib.h>
 #include <comp421/yalnix.h>
-
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
  char free_inode[];
  int free_inode_count = 0;
@@ -38,6 +39,21 @@ int main(int argc, char **argv) {
 	        Exec(argv[1],argv+1);
 	    }
 	}
+	// TracePrintf(0, "Running the server process\n");
+	// int pid;
+	// my_msg msg;
+ //    int senderPID;
+	// init();
+	// if (Register(FILE_SERVER) == ERROR) {
+	// 	fprintf(stderr, "Failed to initialize the service\n" );
+	// }
+	// TracePrintf(0, "Finished the register\n");
+ //    if (argc>1) {
+ //    	pid = Fork();
+	//     if (pid==0) {
+	//         Exec(argv[1],argv+1);
+	//     }
+	// }
 	// TracePrintf(0, "Running\n");
  //    while (1) {
  //        if ((senderPID=Receive(&myMsg))==ERROR) {
@@ -77,6 +93,8 @@ int main(int argc, char **argv) {
 //                 perror("message type error!");
 //                 break;
  //        }
+
+         // }
 //         if (Reply(&myMsg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
 //     }
 	return 0;	
@@ -102,9 +120,16 @@ struct inode *getInode(i) {
 	int offset = i % (BLOCKSIZE/INODESIZE);
 	memcpy(node, (struct inode*)buf + offset * INODESIZE, sizeof(struct inode));
 	putInodeCache(node, i);
+	free(buf);
 	return node;
 }
 
+// get the buff of the block with given block number
+void *getBlock(int i) {
+	void *buf = malloc(SECTORSIZE);
+	ReadSector(i, buf);
+	return buf;
+}
 
 int init() {
 	TracePrintf(0, "Enter the init pocess...\n");
@@ -161,3 +186,91 @@ int init() {
 	}
 	TracePrintf(0, "Finish the init process\n");
 }
+
+// the name of file is DIRNAMELEN
+// return the inode number of file with given filename
+int path_file(char *pathname, int dir_inum) {
+	int len_name = sizeof(pathname);
+	return path_file_helper(pathname, len_name, 0, dir_inum, 0);
+}
+int path_file_helper(char *pathname,int len_name, int curr_index, int curr_inum, int num_slink) {
+	// check if it is absolute path
+	TracePrintf(0, "check the first char find if it is a complet path:");
+	if (curr_index == 0 && pathname[0] == '/') {
+		curr_inum = 0;
+		return path_file_helper(pathname, len_name, curr_index++, curr_inum, num_slink);
+	}
+
+	// delete the dup dash
+	TracePrintf(0, "several dash situation:");
+	while (curr_index < len_name && pathname[curr_index] == '/') curr_index++;
+
+	// if the last index is dash or the componnet is .
+	if (curr_index == len_name) {
+		return curr_inum;
+	}
+	// buff the curr filename
+	TracePrintf(0, "deal with the component in the pathname:");
+	int i = 0;
+	char *file_name = (char *)malloc(DIRNAMELEN);
+	while (curr_index < len_name && pathname[curr_index] != '/') {
+		file_name[i++] = pathname[curr_index++];
+	}
+
+	// if the component is . or ..
+	if (strcmp(file_name,'.') == 0)
+		return path_file_helper(pathname, len_name, curr_index++, curr_inum, num_slink);
+	// how to get the parent's inode number, parent inode number is stored in the inode cache?
+	if (strcmp(file_name,'..') == 0)
+		return path_file_helper(pathname, len_name, curr_index++, curr_inum, num_slink);
+	
+	// find the inode of the curr file name
+	curr_inum = entry_query(file_name, curr_inum);
+	return path_file_helper(pathname, len_name, curr_index++, curr_inum, num_slink);
+}
+
+// find the inode of given filename in the directory
+int entry_query(char *filename, int dir_inum) {
+	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
+	struct inode *dir_inode = getInode(dir_inum); 
+	// return -1 if this is not a directory
+	if (dir_inode->type != INODE_DIRECTORY) {
+		return -1;
+	}
+
+	// loop over the direct block array
+	int i;
+	for (i = 0; i < NUM_DIRECT; i++) {
+		int block_num = dir_inode->direct[i];
+		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
+		int j;
+		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+			if (strcmp(block_buf[j].name, filename) == 0) {
+				return block_buf[j].inum;
+			}
+		}
+	}
+
+	// loop over the indirect block, indirect block store the block numbers
+	int *block_buf = (int*)getBlock(dir_inode->indirect);
+	i = 0;
+	for (i = 0; i < SECTORSIZE/4;i++) {
+		if (block_buf[i]>0) {
+			int block_num = block_buf[i];
+			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
+			int j;
+			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+				if (strcmp(block_buf2[j].name, filename) == 0) {
+					return block_buf2[j].inum;
+				}
+			}
+		}
+		
+	}
+	return ERROR;
+}
+
+
+
+
+
