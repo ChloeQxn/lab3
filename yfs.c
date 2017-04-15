@@ -1,15 +1,15 @@
-/*
-* Program for COMP 521 lab3
-* Author: Chunxiao Zhang, Xiangning Qi
-*/
+// /*
+// * Program for COMP 521 lab3
+// * Author: Chunxiao Zhang, Xiangning Qi
+// */
 
-/*
- * the first thing you need to be able to do is to start the server
- * and have it read the disk to build its internal list of free blocks and free inodes.
- * So start with that.  Then, maybe try Open (you can Open("/"), for example).
- * Once you have Open, try Link (it's pretty simple).
- * Then maybe add Read.  Just keep adding features one at a time, testing as you go.
- */
+// /*
+//  * the first thing you need to be able to do is to start the server
+//  * and have it read the disk to build its internal list of free blocks and free inodes.
+//  * So start with that.  Then, maybe try Open (you can Open("/"), for example).
+//  * Once you have Open, try Link (it's pretty simple).
+//  * Then maybe add Read.  Just keep adding features one at a time, testing as you go.
+//  */
 
 // /clear/courses/comp421/pub/bin/yalnix -ly 5 yfs
 #include <comp421/filesystem.h>
@@ -19,77 +19,44 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stack.h"
+#include "uthash.h"
+#include "yfs.h"
+
+// my_msg *msg;
+
+/*
+try the hash
+*/
+
+struct my_struct {
+    int id;            /* we'll use this field as the key */
+    char name[3];             
+    UT_hash_handle hh; /* makes this structure hashable */
+};
+
+struct my_struct *users = NULL;
+
+void add_user(struct my_struct *s) {
+    HASH_ADD_INT( users, id, s );    
+}
+
+struct my_struct *find_user(int user_id) {
+    struct my_struct *s;
+
+    HASH_FIND_INT( users, &user_id, s );  
+    return s;
+}
 
  char free_inode[];
  int free_inode_count = 0;
  char free_block[];
  int free_block_count = 0;
 
+void delete_user(struct my_struct *user) {
+    HASH_DEL( users, user);  
+}
 
 Stack s;
-
- 
-int main(int argc, char **argv) {
-	TracePrintf(0, "Running the server process\n");
-	int pid;
-	//my_msg msg;
-    int senderPID;
-	init();
-	if (Register(FILE_SERVER) == ERROR) {
-		fprintf(stderr, "Failed to initialize the service\n" );
-	}
-	TracePrintf(0, "Finished the register\n");
-    if (argc>1) {
-    	pid = Fork();
-	    if (pid==0) {
-	        Exec(argv[1],argv+1);
-	    }
-	}
-	TracePrintf(0, "Running\n");
-    while (1) {
-        if ((senderPID=Receive(&myMsg))==ERROR) {
-            perror("error receiving message!");
-            continue;
-        }
-         switch (myMsg.type) {
-             case OPEN:
-                 open_handler(&msg,senderPID);break;
-            // case CREATE:
-            //     create_handler(&myMsg,sender_pid);break;
-            case READ:
-                read_handler(&myMsg,sender_pid);break;
-            // case WRITE:
-            //     write_handler(&myMsg,sender_pid);break;
-            // case LINK:
-            //     link_handler(&myMsg,sender_pid);break;
-            // case UNLINK:
-            //     unlink_handler(&myMsg,sender_pid);break;
-            // case SYMLINK:
-            //     symlink_handler(&myMsg,sender_pid);break;
-            // case READLINK:
-            //     readlink_handler(&myMsg,sender_pid);break;
-            // case MKDIR:
-            //     mkdir_handler(&myMsg,sender_pid);break;
-            // case RMDIR:
-            //     rmdir_handler(&myMsg,sender_pid);break;
-            // case CHDIR:
-            //     chdir_handler(&myMsg,sender_pid);break;
-            // case STAT:
-            //     stat_handler(&myMsg,sender_pid);break;
-            // case SYNC:
-            //     sync_handler(&myMsg);break;
-            // case SHUTDOWN:
-            //     shutdown_handler(&myMsg,sender_pid);break;
-            default:
-                perror("message type error!");
-                break;
-        }
-
-         }
-//         if (Reply(&myMsg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
-//     }
-	return 0;	
-} 
 
 struct inode *getInode(i) {
 	int blockIndex = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
@@ -181,38 +148,7 @@ int init() {
 	TracePrintf(0, "Finish the init process\n");
 }
 
-// open the file with given filename, returns the descriptor of the file if success
-// int open_handler(my_msg *msg, int sender_pid) {
-// 	int file_inum = path_file(pathname, dir_inum);
-// 	char *filename;
-// 	if (CopyFrom(sender_pid, *filename, *msg, DIRNAMELEN) == 0) {
-// 	}	
-// 	// fail to find the file 
-// 	if (file_inum == -1) return -1;
-
-// 	// 
-// }
-
-// // close the file with given fd
-// int close_handler(int fd) {
-
-// }
-
-// // create and open the new file
-// int create_handler(char *pathname){
-
-// }
-
-// // This request reads data from an open file, beginning at the current position in the file as represented 
-// // by the given file descriptor fd
-// int read_handler(int fd, void *buf, int size) {
-
-// }
-
-// int write_handler(int fd, void *buf, int size) {
-
-// }
- // the name of file is DIRNAMELEN
+// the name of file is DIRNAMELEN
 // return the inode number of file with given filename
 int path_file(char *pathname, int dir_inum) {
 	// length of pathname
@@ -325,69 +261,140 @@ int entry_query(char *filename, int dir_inum) {
 	return -1;
 }
 
+/*
+handlers for the message
+*/
+// open the file with given filename, returns the descriptor of the file if success
+int open_handler(my_msg *msg, int sender_pid) {
+	TracePrintf(0,"open_handler start...");
+	// read the msg to local
+	char pathname[MAXPATHNAMELEN];
+	// pathname = (char*)msg->addr1;
+	// char *x = "/abcdd";
+	// TracePrintf(0,"the lenth:%d", strlen(x));
+	TracePrintf(0, "the pathname is :%s\n", ((char *)(msg->addr1)));
+	TracePrintf(0, "open_handler: the len of addr1:%d:\n", strlen(msg->addr1));
+	TracePrintf(0, "the msg data2:%d\n", msg->data2);
+    // if (CopyFrom(sender_pid,(void*)pathname,(void*)msg->addr1,msg->data2+1) == ERROR) {
+	 if (CopyFrom(sender_pid,pathname,msg->addr1,msg->data2 + 1) == ERROR) {
+    	TracePrintf(0, "ERROR\n");
+    }
+    TracePrintf(0, "the pathname is %s\n", pathname);
+
+    int dir_inum;
+    CopyFrom(sender_pid, dir_inum, msg->data1, sizeof(int));
+    // find the inum for the open file
+    int open_inum = path_file(pathname,dir_inum);
+
+    // 
+    if (open_inum<=0) {
+        msg->type = ERROR;
+    }
+    
+    return open_inum;
+}
+
+// close the file with given fd
+int close_handler(int fd) {
+
+}
+
+// create and open the new file
+int create_handler(char *pathname){
+
+}
+
+// This request reads data from an open file, beginning at the current position in the file as represented 
+// by the given file descriptor fd
+int read_handler(int fd, void *buf, int size) {
+
+}
+
+int write_handler(int fd, void *buf, int size) {
+
+}
+
 int main(int argc, char **argv) {
 	TracePrintf(0, "Running the server process\n");
-	// int pid;
-	// my_msg msg;
- //    int senderPID;
-	// init();
-	// if (Register(FILE_SERVER) == ERROR) {
-	// 	fprintf(stderr, "Failed to initialize the service\n" );
-	// }
-	// TracePrintf(0, "Finished the register\n");
- //    if (argc>1) {
- //    	pid = Fork();
-	//     if (pid==0) {
-	//         Exec(argv[1],argv+1);
-	//     }
-	// }
-	// TracePrintf(0, "Running\n");
- //    while (1) {
- //        if ((senderPID=Receive(&myMsg))==ERROR) {
- //            perror("error receiving message!");
- //            continue;
- //        }
- //         switch (myMsg.type) {
- //             case OPEN:
- //                 open_handler(&msg,senderPID);break;
-//             case CREATE:
-//                 create_handler(&myMsg,sender_pid);break;
-//             case READ:
-//                 read_handler(&myMsg,sender_pid);break;
-//             case WRITE:
-//                 write_handler(&myMsg,sender_pid);break;
-//             case LINK:
-//                 link_handler(&myMsg,sender_pid);break;
-//             case UNLINK:
-//                 unlink_handler(&myMsg,sender_pid);break;
-//             case SYMLINK:
-//                 symlink_handler(&myMsg,sender_pid);break;
-//             case READLINK:
-//                 readlink_handler(&myMsg,sender_pid);break;
-//             case MKDIR:
-//                 mkdir_handler(&myMsg,sender_pid);break;
-//             case RMDIR:
-//                 rmdir_handler(&myMsg,sender_pid);break;
-//             case CHDIR:
-//                 chdir_handler(&myMsg,sender_pid);break;
-//             case STAT:
-//                 stat_handler(&myMsg,sender_pid);break;
-//             case SYNC:
-//                 sync_handler(&myMsg);break;
-//             case SHUTDOWN:
-//                 shutdown_handler(&myMsg,sender_pid);break;
-//             default:
-//                 perror("message type error!");
-//                 break;
-         // }
+	int pid;
+	struct my_msg msg;
+    int senderPID;
+	init();
+	if (Register(FILE_SERVER) == ERROR) {
+		fprintf(stderr, "Failed to initialize the service\n" );
+	}
+	TracePrintf(0, "Finished the register\n");
+    if (argc>1) {
+    	pid = Fork();
+	    if (pid==0) {
+	        Exec(argv[1],argv+1);
+	    }
+	}
+	TracePrintf(0, "Running\n");
+    while (1) {
+        if ((senderPID=Receive(&msg))==ERROR) {
+            perror("error receiving message!");
+            continue;
+        }
+        TracePrintf(0, "the size of msg:%d \n", sizeof(msg));
+        switch (msg.type) {
+             case OPEN:
+                 open_handler(&msg,senderPID);break;
+            // case CREATE:
+            //     create_handler(&myMsg,sender_pid);break;
+            // case READ:
+            //     read_handler(&msg,senderPID);break;
+            // case WRITE:
+            //     write_handler(&msg,senderPID);break;
+            // case LINK:
+            //     link_handler(&myMsg,sender_pid);break;
+            // case UNLINK:
+            //     unlink_handler(&myMsg,sender_pid);break;
+            // case SYMLINK:
+            //     symlink_handler(&myMsg,sender_pid);break;
+            // case READLINK:
+            //     readlink_handler(&myMsg,sender_pid);break;
+            // case MKDIR:
+            //     mkdir_handler(&myMsg,sender_pid);break;
+            // case RMDIR:
+            //     rmdir_handler(&myMsg,sender_pid);break;
+            // case CHDIR:
+            //     chdir_handler(&myMsg,sender_pid);break;
+            // case STAT:
+            //     stat_handler(&myMsg,sender_pid);break;
+            // case SYNC:
+            //     sync_handler(&myMsg);break;
+            // case SHUTDOWN:
+            //     shutdown_handler(&myMsg,sender_pid);break;
+            default:
+                perror("message type error!");
+                break;
+        }
+
+         }
 //         if (Reply(&myMsg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
 //     }
-	// char *pathname = "////a/b/c/";
-	// path_file(pathname, ROOTINODE);
-	struct inode *my = getInode(3);
-	return 0;	
-
+	return 0;
 } 
+
+// int main(int argc, char **argv) {
+
+// 	TracePrintf(0, "Running the server process\n");
+// 	char *pathname = "////a/b/c/";
+// 	TracePrintf(0, "nakme:%s", pathname);
+// // 	// path_file(pathname, ROOTINODE);
+// // 	// struct inode *my = getInode(3);
+// // 	/**/
+// 	char name[3] = "tom" ;
+// 	TracePrintf(0, "print the name:%s\n", name);
+// 	(struct my_struct) ex;
+// 	ex = {1,"tom"};
+// 	TracePrintf(0,"print the key and name:%d,%s\n",ex->id,ex->name);
+// 	add_user(ex);
+// 	int value = find_user(1)->name;
+// 	TracePrintf(0, "the name is %s:", value);
+// 	return 0;	
+// } 
 
 
 

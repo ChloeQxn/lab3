@@ -27,11 +27,8 @@
 #	For example, the Makefile will make test1 out of test1.c,
 #	if you have a file named test1.c in this directory.
 #
-<<<<<<< HEAD
-ALL = yfs iolib.a
-=======
-ALL = yfs iolib.a 
->>>>>>> ecde2953bce98af2073027196c4a4bc382ab6d14
+
+ALL = yfs iolib.a topen2
 
 #
 #	You must modify the YFS_OBJS and YFS_SRCS definitions below.
@@ -39,13 +36,9 @@ ALL = yfs iolib.a
 #	YFS server, and YFS_SRCS should  be a list of the corresponding
 #	source files that make up your serever.
 #
-<<<<<<< HEAD
-YFS_OBJS = yfs.o stack.o
-YFS_SRCS = yfs.c stack.c
-=======
-YFS_OBJS = yfs.o cacheLRU.o
-YFS_SRCS = yfs.c cacheLRU.c
->>>>>>> ecde2953bce98af2073027196c4a4bc382ab6d14
+YFS_OBJS = yfs.o cacheLRU.o stack.o 
+YFS_SRCS = yfs.c cacheLRU.c stack.c
+
 
 #
 #	You must also modify the IOLIB_OBJS and IOLIB_SRCS definitions
@@ -53,10 +46,10 @@ YFS_SRCS = yfs.c cacheLRU.c
 #	your YFS library, and IOLIB_SRCS should  be a list of the
 #	corresponding source files that make up your library.
 #
-# IOLIB_OBJS = example3.o 
-# IOLIB_SRCS = example3.c 
+IOLIB_OBJS = iolib.o 
+IOLIB_SRCS = iolib.c 
 
-#
+#nan
 #	You should not have to modify anything else in this Makefile
 #	below here.  If you want to, however, you may modify things
 #	such as the definition of CFLAGS, for example.
