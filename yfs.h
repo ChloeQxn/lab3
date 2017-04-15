@@ -1,4 +1,4 @@
-#define OPEN 0
+#define OPEN 16
 #define CLOSE 1
 #define CREATE 2
 #define READ 3

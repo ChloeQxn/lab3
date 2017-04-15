@@ -59,7 +59,7 @@ void delete_user(struct my_struct *user) {
 Stack s;
 
 struct inode *getInode(i) {
-	int blockIndex = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
+	int blockIndex = 1 + (i) / (BLOCKSIZE/INODESIZE);
 	void *buf = readBlockCache(blockIndex);
 	if (buf == NULL) {
 		TracePrintf(0, "Block is not in the cache%d \n", blockIndex);
@@ -73,7 +73,7 @@ struct inode *getInode(i) {
 
 	memcpy(node, (struct inode*)buf + offset * INODESIZE, sizeof(struct inode));
 	putInodeCache(node, i);
-	free(buf);
+	// free(buf);
 	return node;
 }
 
@@ -161,18 +161,20 @@ int path_file(char *pathname, int dir_inum) {
 	// use helper to find the inum of the file
 	int curr_index = 0;
 	int curr_inum = dir_inum;
-	int inum = path_file_helper(pathname, len_name, curr_index, dir_inum, 0);
+	TracePrintf(0,"path_file, the curr_inum and dir_inum is %d\n", curr_inum);
+	int inum = path_file_helper(pathname, len_name, curr_index, curr_inum, 0);
 	clear(&s);
+	return inum;
 }
 
 
 
 int path_file_helper(char *pathname,int len_name, int curr_index, int curr_inum, int num_slink) {
 	// check if it is absolute path
-	TracePrintf(0, "thhe curr_index is %d\n", curr_index);
+	TracePrintf(0, "the curr_index is %d\n", curr_index);
 	if (curr_index == 0 && pathname[0] == '/') {
 		TracePrintf(0, "it is a absolute path.\n");
-		curr_inum = 0;
+		curr_inum = 1;
 		return path_file_helper(pathname, len_name, ++curr_index, curr_inum, num_slink);
 	}
 
@@ -222,12 +224,19 @@ int path_file_helper(char *pathname,int len_name, int curr_index, int curr_inum,
 
 // find the inode of given filename in the directory
 int entry_query(char *filename, int dir_inum) {
+	TracePrintf(0, "entry_query starts... the filename is %s, the curr directory inum is: %d\n", filename, dir_inum);
+	
 	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
 	struct inode *dir_inode = getInode(dir_inum); 
 	// return -1 if this is not a directory
 	if (dir_inode->type != INODE_DIRECTORY) {
 		return -1;
 	}
+
+	// the entry number in this dir file
+	int entry_num = (dir_inode->size) / sizeof(struct dir_entry);
+	int entry_count = 0;
+	TracePrintf(0, "the entry_num is %d", entry_num);
 
 	// loop over the direct block array
 	int i;
@@ -236,12 +245,17 @@ int entry_query(char *filename, int dir_inum) {
 		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
 		int j;
 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+			entry_count++;
+			if (entry_count > entry_num) return -1;
 			if (strcmp(block_buf[j].name, filename) == 0) {
+				TracePrintf(0, "find the file inum%d", block_buf[j].inum);
 				return block_buf[j].inum;
 			}
+			
 		}
 	}
 
+	TracePrintf(0, "not found in the dir block, loop the indirect:");
 	// loop over the indirect block, indirect block store the block numbers
 	int *block_buf = (int*)getBlock(dir_inode->indirect);
 	i = 0;
@@ -251,6 +265,8 @@ int entry_query(char *filename, int dir_inum) {
 			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
 			int j;
 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+				entry_count++;
+			    if (entry_count > entry_num) return -1;
 				if (strcmp(block_buf2[j].name, filename) == 0) {
 					return block_buf2[j].inum;
 				}
@@ -261,28 +277,71 @@ int entry_query(char *filename, int dir_inum) {
 	return -1;
 }
 
+// add an entry of given filename
+// int add_entry(char *filename, int new_inum, int dir_inum) {
+// 	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
+// 	struct inode *dir_inode = getInode(dir_inum); 
+// 	// return -1 if this is not a directory
+// 	if (dir_inode->type != INODE_DIRECTORY) {
+// 		return -1;
+// 	}
+
+// 	// loop over the direct block array
+// 	int i;
+// 	for (i = 0; i < NUM_DIRECT; i++) {
+// 		int block_num = dir_inode->direct[i];
+// 		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
+// 		int j;
+// 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+// 			// if the entry is empty, add new entry here
+// 			if (block_buf[j].inum == 0) {
+// 				block_buf[j].inum = new_inum;
+// 				memcpy(block_buf[j].name, filename, MAXPATHNAMELEN);
+// 				return 1;
+// 			}
+			
+// 		}
+// 	}
+
+// 	TracePrintf(0, "not found in the dir block, loop the indirect:");
+// 	// loop over the indirect block, indirect block store the block numbers
+// 	int *block_buf = (int*)getBlock(dir_inode->indirect);
+// 	i = 0;
+// 	for (i = 0; i < SECTORSIZE/4;i++) {
+// 		if (block_buf[i]>0) {
+// 			int block_num = block_buf[i];
+// 			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
+// 			int j;
+// 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+// 				// if the entry is empty, add new entry heere
+// 				if (block_buf2[j].inum == 0) {
+// 					memcpy(block_buf2[j].name, filename, MAXPATHNAMELEN);
+// 					return 1;
+// 				}
+				
+// 			}
+// 		}
+		
+// 	}
+// 	// no tmpty entry available in the dir
+// 	return ERROR;
+// }
+
 /*
 handlers for the message
 */
 // open the file with given filename, returns the descriptor of the file if success
 int open_handler(my_msg *msg, int sender_pid) {
-	TracePrintf(0,"open_handler start...");
+	TracePrintf(0,"open_handler start...\n");
 	// read the msg to local
 	char pathname[MAXPATHNAMELEN];
-	// pathname = (char*)msg->addr1;
-	// char *x = "/abcdd";
-	// TracePrintf(0,"the lenth:%d", strlen(x));
-	TracePrintf(0, "the pathname is :%s\n", ((char *)(msg->addr1)));
-	TracePrintf(0, "open_handler: the len of addr1:%d:\n", strlen(msg->addr1));
-	TracePrintf(0, "the msg data2:%d\n", msg->data2);
-    // if (CopyFrom(sender_pid,(void*)pathname,(void*)msg->addr1,msg->data2+1) == ERROR) {
-	 if (CopyFrom(sender_pid,pathname,msg->addr1,msg->data2 + 1) == ERROR) {
+	if (CopyFrom(sender_pid,pathname,msg->addr1,msg->data2+1) == ERROR) {
     	TracePrintf(0, "ERROR\n");
     }
-    TracePrintf(0, "the pathname is %s\n", pathname);
-
+    TracePrintf(0, "open_handleer: the pathname is %s\n", pathname);
     int dir_inum;
-    CopyFrom(sender_pid, dir_inum, msg->data1, sizeof(int));
+    CopyFrom(sender_pid, &dir_inum, &(msg->data1), sizeof(int));
+    TracePrintf(0, "open_handler: the dir_inum after CopyFrom:%d\n", dir_inum);
     // find the inum for the open file
     int open_inum = path_file(pathname,dir_inum);
 
@@ -314,14 +373,68 @@ int write_handler(int fd, void *buf, int size) {
 
 }
 
+/* create a head link from new file name to the existing oldname
+ * return error if the newname already exists
+ * return 0 if success
+*/
+// int link_handler(Msg *msg, int sender_pid) {
+// 	// read the newname form msg
+// 	char newname[MAXPATHNAMELEN];
+// 	if (CopyFrom(senderPID, newname, msg->addr1, msg->data1+1) == ERROR) {
+// 		return ERROR;
+// 	}
+
+// 	// firstly find the parent inum of the newname
+
+// 	// if the new name already exists
+// 	if (entry_query(newname, curr_inum) != -1) 
+// 		return ERROR;
+
+// 	// read oldname and curr_inum from msg
+// 	char oldname[MAXPATHNAMELEN];
+// 	int curr_inum = 1;
+// 	if (CopyFrom(senderPID, oldname, msg->addr2, msg->data2+1) == ERROR) {
+// 		return ERROR;
+// 	}
+// 	if (CopyFrom(senderPID, &curr_inum, &(msg->data3), sizeof(int)) == ERROR) {
+// 		return ERROR;
+// 	}
+
+// 	// find the inum for the oldname, if it is a dir, return error
+// 	int old_inum = entry_query(oldname, curr_inum);
+// 	if (getInode(old_inum)->type == INODE_DIRECTORY) return ERROR;
+
+// 	// find the parent file for this entry to be added
+// 	// copy the parent filename 
+// 	char parent_name[MAXPATHNAMELEN];
+// 	int i = MAXPATHNAMELEN;
+// 	while(i >= 0 && newname[i] != '/') {
+// 		i--;
+// 	}
+// 	for (;i>=0;i--) {
+// 		parent_name[i] = newname[i];
+// 	}
+// 	// find the parent inum
+// 	int parent_inum = path_file();
+
+
+// 	if (parent_inum != -1) {
+// 		add_entry(filename, old_inum, parent_inum);
+// 	}
+
+
+// 	if (add_entry(newname, old_inum, curr_inum) == ERROR) 
+// 		return ERROR;
+// }
+
 int main(int argc, char **argv) {
 	TracePrintf(0, "Running the server process\n");
 	int pid;
 	struct my_msg msg;
     int senderPID;
 	init();
-	if (Register(FILE_SERVER) == ERROR) {
-		fprintf(stderr, "Failed to initialize the service\n" );
+	if (Register(FILE_SERVER)  != 0) {
+		fprintf(stderr, "ERROR!!! Failed to initialize the service\n" );
 	}
 	TracePrintf(0, "Finished the register\n");
     if (argc>1) {
@@ -330,10 +443,12 @@ int main(int argc, char **argv) {
 	        Exec(argv[1],argv+1);
 	    }
 	}
-	TracePrintf(0, "Running\n");
+	TracePrintf(0, "Running................\n");
     while (1) {
-        if ((senderPID=Receive(&msg))==ERROR) {
-            perror("error receiving message!");
+    	senderPID=Receive(&msg);
+    	fprintf((stderr), "sender pid is %d\n", senderPID );
+        if (senderPID==ERROR) {
+            perror("error receiving message!\n");
             continue;
         }
         TracePrintf(0, "the size of msg:%d \n", sizeof(msg));

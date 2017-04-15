@@ -11,44 +11,47 @@ typedef struct File {
 	int open; //1 means opened, 0 means closed
 }File;
 
-struct File* opened[MAX_OPEN_FILES]; 
+struct File opened[MAX_OPEN_FILES]; 
 int cur_dir = ROOTINODE;
+int initialize = 0;
+void initial() {
+	if (initialize) return;
+	int i = 0;	
+	for (;i<MAX_OPEN_FILES; i ++) {
+		opened[i].inum = 0;
+		opened[i].cur_pos = 0;
+		opened[i].open = 0;
+	}
+	initialize = 1;
+}
 int Open(char *pathname) {
+	initial();
 	my_msg msg;
 	msg.type = OPEN;
 	msg.data1 = cur_dir;
 	msg.data2 = (int)strlen(pathname);
 	msg.addr1 = pathname;
 	fprintf(stderr, "path name in msg library%s\n", (char*)msg.addr1);
-	fprintf(stderr, "path name in msg library with no parse%s.\n",msg.addr1);
-	fprintf(stderr,"open in lib %s\n", pathname);
 	int fd = 0;
 	for (;fd < MAX_OPEN_FILES; fd ++) {
-		if (opened[fd]->open == 0) {
+		fprintf(stderr, "%d\n", fd);
+		if (opened[fd].open == 0) {
 			break;
 		}
 	}
-	if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
-		return ERROR;
-	}
-	// my_msg* msg = (my_msg*)malloc(sizeof(my_msg));
-	// msg->type = OPEN;
-	// msg->data1 = cur_dir;
-	// msg->data2 = (int)strlen(pathname);
-	// msg->addr1 = pathname;
-	// fprintf(stderr, "path name in msg library%s\n", msg->addr1);
-
-	
-
-
-	
-	if (Send(&msg, -FILE_SERVER) == ERROR) {
+	if (Send(&msg, -1) == ERROR) {
 		// free(msg);
 		return ERROR;
 	}
-	opened[fd]->open = 1;
-	opened[fd]->cur_pos = 0;
-	opened[fd]->inum = cur_dir;
+	
+	if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
+		fprintf(stderr, "fd error \n" );
+		return ERROR;
+	}
+
+	opened[fd].open = 1;
+	opened[fd].cur_pos = 0;
+	opened[fd].inum = cur_dir;
 	// free(msg);
 	return 0;
 }

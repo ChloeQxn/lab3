@@ -72,7 +72,7 @@ cacheBlock* get_hash_block(int b) {
  * Read block from cache by inode number 
  */
 void *readBlockCache(int block_num) {
-	TracePrintf(0, "Read block cache\n");
+	TracePrintf(0, "Read block cache, find the %dth bolck\n", block_num);
 	//int block_num = 1 + (i + 1) / (BLOCKSIZE/INODESIZE);
 	cacheBlock *block = get_hash_block(block_num);
 	if (block == NULL) {
@@ -97,6 +97,7 @@ int putBlockCache(void *data, int block_num) {
 	TracePrintf(0, "Put block cache\n");
 	if (block_cache_len >= BLOCK_CACHESIZE) {
 		cacheBlockTail = cacheBlockTail->pre;
+		free(cacheBlockTail->next);
 		cacheBlockTail->next = NULL;
 	}
 	struct cacheBlock *newBlockCache = (struct cacheBlock *)malloc(sizeof(struct cacheBlock*));
