@@ -28,7 +28,7 @@
 #	if you have a file named test1.c in this directory.
 #
 
-ALL = yfs iolib.a topen2
+ALL = yfs iolib.a topen2 tlink 
 
 #
 #	You must modify the YFS_OBJS and YFS_SRCS definitions below.
@@ -36,9 +36,10 @@ ALL = yfs iolib.a topen2
 #	YFS server, and YFS_SRCS should  be a list of the corresponding
 #	source files that make up your serever.
 #
-YFS_OBJS = yfs.o cacheLRU.o stack.o 
-YFS_SRCS = yfs.c cacheLRU.c stack.c
-
+# YFS_OBJS = yfs.o  cache.o
+# YFS_SRCS = yfs.c  cache.c
+YFS_OBJS = yfs.o  cacheLRU.o
+YFS_SRCS = yfs.c  cacheLRU.c
 
 #
 #	You must also modify the IOLIB_OBJS and IOLIB_SRCS definitions

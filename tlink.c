@@ -11,8 +11,11 @@ main()
 	status = Create("/a");
 	printf("Create status %d\n", status);
 
-	status = Link("/a", "/b");
-	printf("Link status %d\n", status);
+	status = Create("/a/b");
+	printf("Create status %d\n", status);
+
+	// status = Link("/a", "/b");
+	// printf("Link status %d\n", status);
 
 	Shutdown();
 }

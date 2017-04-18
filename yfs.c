@@ -21,109 +21,208 @@
 #include "stack.h"
 #include "uthash.h"
 #include "yfs.h"
+// #include "cache.h"
+#include "cacheLRU.h"
 
-// my_msg *msg;
+// the num of total blocks and inodes
+int block_num;
+int inode_num;
 
-/*
-try the hash
-*/
+// a list store the status of inode and blocks, 0 means free, 1 means dirty
+int free_inode[];
+int free_inode_count = 0;
+int free_block[];
+int free_block_count = 0;
 
-struct my_struct {
-    int id;            /* we'll use this field as the key */
-    char name[3];             
-    UT_hash_handle hh; /* makes this structure hashable */
+
+struct my_comp {
+	int par_inum;
+	char name[DIRNAMELEN];
 };
 
-struct my_struct *users = NULL;
-
-void add_user(struct my_struct *s) {
-    HASH_ADD_INT( users, id, s );    
+////////////////
+void *getBlock(int blockIndex) {
+	TracePrintf(0, "GET BLOCK %d .............\n", blockIndex);
+	if (!blockIndex) {
+		fprintf(stderr, "ERROR! CANNOT READ BLOCK 0\n");
+		TracePrintf(0,"ERROR! CANNOT READ BLOCK 0\n");
+	}
+	void *buf1 = readBlockCache(blockIndex);
+	if (buf1 == NULL) {
+		TracePrintf(0, "Block is not in the cache %d \n", blockIndex);
+		buf1 = malloc(SECTORSIZE);
+		if (ReadSector(blockIndex, buf1) == ERROR) {
+			TracePrintf(0, "Read sector error\n");
+		}
+		TracePrintf(0, "Read the sector from blockIndex %d \n", blockIndex);
+		putBlockCache(buf1, blockIndex);
+	}
+	TracePrintf(0, "Finish get block ................\n");
+	return buf1;
 }
-
-struct my_struct *find_user(int user_id) {
-    struct my_struct *s;
-
-    HASH_FIND_INT( users, &user_id, s );  
-    return s;
-}
-
- char free_inode[];
- int free_inode_count = 0;
- char free_block[];
- int free_block_count = 0;
-
-void delete_user(struct my_struct *user) {
-    HASH_DEL( users, user);  
-}
-
-Stack s;
 
 struct inode *getInode(i) {
-	int blockIndex = 1 + (i) / (BLOCKSIZE/INODESIZE);
-	void *buf = readBlockCache(blockIndex);
-	if (buf == NULL) {
-		TracePrintf(0, "Block is not in the cache%d \n", blockIndex);
-		buf = malloc(SECTORSIZE);
-		ReadSector(blockIndex, buf);
-		TracePrintf(0, "Read the sector from blockIndex %d \n", blockIndex);
-		putBlockCache(buf, blockIndex);
+	TracePrintf(0, "Get inode %d .................\n", i);
+	struct inode* node = readInodeCache(i);
+	if (node != NULL) {
+		TracePrintf(0, "This inode is found in the cache\n");
+		return node;
 	}
-	struct inode* node = (struct inode*)malloc(sizeof(struct inode));
+	int blockIndex = 1 + i / (BLOCKSIZE/INODESIZE);
+	void *buf = getBlock(blockIndex);
 	int offset = i % (BLOCKSIZE/INODESIZE);
-
-	memcpy(node, (struct inode*)buf + offset * INODESIZE, sizeof(struct inode));
+	node = (struct inode *)malloc(INODESIZE);
+	//memcpy((void *)node, buf + offset * INODESIZE, INODESIZE);
+	memcpy((void *)node, buf + offset, INODESIZE);
 	putInodeCache(node, i);
-	// free(buf);
+	TracePrintf(0, "Finish get inode %d .................\n", i);
+	//free(buf);
 	return node;
 }
 
-// get the buff of the block with given block number
-void *getBlock(int blockIndex) {
-	// void *buf = malloc(SECTORSIZE);
-	// ReadSector(i, buf);
-	void *buf = readBlockCache(blockIndex);
-	if (buf == NULL) {
-		TracePrintf(0, "Block is not in the cache%d \n", blockIndex);
-		buf = malloc(SECTORSIZE);
-		ReadSector(blockIndex, buf);
-		TracePrintf(0, "Read the sector from blockIndex %d \n", blockIndex);
-		putBlockCache(buf, blockIndex);
+///////////////////////////////////////////////////////////////////////////
+// get functions for test without cache
+// struct inode *getInode(int i) {
+// 	int blockIndex = 1 + (i) / (BLOCKSIZE/INODESIZE);
+// 	void *buf = malloc(SECTORSIZE);
+// 	ReadSector(blockIndex, buf);
+// 	struct inode* node = (struct inode*)malloc(sizeof(struct inode));
+// 	int offset = i % (BLOCKSIZE/INODESIZE);
+// 	memcpy(node, (struct inode*)buf + offset, sizeof(struct inode));
+// 	free(buf);
+// 	return node;
+// }
+
+
+// // get the buff of the block with given block number
+// void *getBlock(int blockIndex) {
+// 	void *buf = malloc(SECTORSIZE);
+// 	ReadSector(blockIndex, buf);
+// 	return buf;
+// }
+
+// /*
+//  * free the inode of given index
+// */
+// int freeInode(int index) {
+// 	if (index > inode_num || index == 0 || index == 1) return ERROR;
+// 	free_inode[index] = 0;
+// 	free_inode_count++;
+// 	// struct inode *node = getInode(index);
+// 	// node->type = INODE_FREE;
+// 	return index;
+// }
+///////////////////////////////////////////////////////////////////////////
+
+/*
+* Get a free inode for use. Return the inum if suceess.
+*/
+int get_freeInode() {
+	TracePrintf(0, "get_freeInode starts...\n");
+	if (free_inode_count == 0) return ERROR;
+	int i = 2;
+	for (; i <= inode_num; i++) {
+		if (free_inode[i] == 0) {
+			break;
+		}
 	}
-	return buf;
+	TracePrintf(0, "get a free inode %d\n", i);
+	return i;
 }
 
+// int allocInode(int type)
+// {
+//     int inum;
+//     for (i=2; inum<=inode_num; inum++) {
+//         if (free_inode[i]==0) break;
+//     }
+//     if (i > inode_num) return ERROR;
+
+//     // inode_cache *n = read_inode(free_inum);
+//     if (type==INODE_REGULAR) {
+//         n->data.type = INODE_REGULAR;
+//         n->dirty = 1;
+//         n->data.nlink = 1;
+//         n->data.reuse++;
+//         n->data.size = 0;
+//         for (i=0; i<NUM_DIRECT; i++)
+//             n->data.direct[i] = 0;
+//         n->data.indirect = 0;
+//     }
+//     else if (type==INODE_DIRECTORY) {
+//         n->data.type = INODE_DIRECTORY;
+//         n->dirty = 1;
+//         n->data.nlink = 1;
+//         n->data.reuse++;
+//         n->data.size = 2*sizeof(struct dir_entry);
+//         for (i=1; i<NUM_DIRECT; i++)
+//             n->data.direct[i] = 0;
+//         n->data.indirect = 0;
+//         n->data.direct[0] = alloc_block();
+//         block_cache *b = read_block(n->data.direct[0]);
+//         struct dir_entry init[2];
+//         init[0].inum = free_inum;
+//         init[0].name[0] = '.';
+//         init[1].inum = pare_inum;
+//         init[1].name[0] = '.';
+//         init[1].name[1] = '.';
+//         memcpy(b->data,init,2*sizeof(struct dir_entry));
+//         b->dirty = 1;
+//     }
+//     else if (type==INODE_SYMLINK) {
+
+//         n->data.type = INODE_SYMLINK;
+//         n->dirty = 1;
+//         n->data.nlink = 1;
+//         n->data.reuse++;
+//         n->data.size = 0;
+//         for (i=0; i<NUM_DIRECT; i++)
+//             n->data.direct[i] = 0;
+//         n->data.indirect = 0;
+        
+//     }
+//     free_inode[inum] = 1;
+//     return i;
+// }
 int init() {
 	TracePrintf(0, "Enter the init pocess...\n");
+	initCache();
 	void *buf = malloc(SECTORSIZE);
 	// ReadSector(1, buf);
 	struct fs_header *header= (struct fs_header *)getInode(0);
-	int block_num = header->num_blocks;
-	int inode_num = header->num_inodes;
+	block_num = header->num_blocks;
+	inode_num = header->num_inodes;
 	int i = 1;
 	/*
 	 * Use an array to store free block, 0 means free, 1 means occupied
 	 */ 
-	 free_block[0] = 1;
-	 int inodeblock_num = (inode_num + 1) / (BLOCKSIZE/INODESIZE);
+	// free_block = (int *)malloc(sizeof(int) * block_num);
+	// free_inode = (int *)malloc(sizeof(int) * inode_num);
+	free_block[block_num];
+	free_inode[inode_num];
+	free_block[0] = 1;
+	int inodeblock_num = inode_num / (BLOCKSIZE/INODESIZE) + 1; //number of blocks which stores inode
 	for (; i < block_num; i ++) {
-		if (i < inodeblock_num) {
+		if (i <= inodeblock_num) {
 			free_block[i] = 1;
 		} else {
 			free_block[i] = 0; 
 			free_block_count++;
 		} 
 	}
-	TracePrintf(0,"Initialize the free inode list\n");
+	TracePrintf(0,"Initialize the free inode list, inode_num is %d\n", inode_num);
 	
 	 // * Use the array to store free inode, 0 means free, 1 means occupied
 	 
 	free_inode[0] = 1;
-	for (; i < inode_num; i ++) {
+	for (i = 1; i < inode_num; i ++) {
 		struct inode *node = getInode(i);
 		if (node->type == INODE_FREE) {
+			TracePrintf(0, "This node doesn't contain data\n");
 			free_inode[i] = 0;
 			free_inode_count ++;
 		} else {
+			TracePrintf(0, "This node contains data\n");
 			/*
 			 * Loop the direct and indirect array
 			 */
@@ -133,37 +232,90 @@ int init() {
 				free_block[j] = 1;
 				free_block_count --;
 			 }
-
-			ReadSector(node->indirect, buf);
-
-			
-			for(j = 0; j < sizeof(buf) / 4; j ++) {
-				free_block[j + node->indirect] = 1; 
-				free_block_count --;
+			TracePrintf(0, "Read indirect block %d \n", node->indirect);
+			if (node->indirect) {
+				buf = getBlock(node->indirect);
+				for(j = 0; j < sizeof(buf) / 4; j ++) {
+					free_block[j + node->indirect] = 1; 
+					free_block_count --;
+				}
 			}
-		
-
 		}
 	}
 	TracePrintf(0, "Finish the init process\n");
 }
+
+// // init function by xq
+// int init() {
+// 	TracePrintf(0, "Enter the init pocess...\n");
+// 	// initCache();
+
+// 	// read the inode header, the num_blocks is the total num, num_inodes except the header
+// 	void *buf = malloc(SECTORSIZE);
+// 	struct fs_header *header= (struct fs_header *)getInode(0);
+// 	block_num = header->num_blocks;
+// 	inode_num = header->num_inodes;
+// 	TracePrintf(0, "init: the num of block is%d, the num of inodes is %d\n", block_num, inode_num);
+	
+// 	// update the free_block and free inode
+// 	free_block[block_num];
+// 	free_inode[inode_num+1];
+// 	free_block[0] = 1;
+// 	free_inode[0] = 1;
+// 	int inodeblock_num = inode_num / (BLOCKSIZE/INODESIZE) + 1; //number of blocks which stores inode
+// 	int i = 1;
+// 	// init the free block and free_inode
+// 	for (; i < block_num; i ++) {
+// 		if (i <= inodeblock_num) {
+// 			free_block[i] = 1;
+// 		} else {
+// 			free_block[i] = 0; 
+// 			free_block_count++;
+// 		} 
+// 	}
+// 	for (i = 1; i <= inode_num; i ++) {
+// 		struct inode *node = getInode(i);
+// 		if (node->type == INODE_FREE) {
+// 			free_inode[i] = 0;
+// 			free_inode_count++;
+// 		} else {
+// 			free_inode[i] = 1;
+// 			int j = 0;
+// 			for (; j < NUM_DIRECT; j++) {
+// 				if (node->direct[j] > 0) {
+// 					free_block[node->direct[j]] = 1;
+// 					free_block_count--;
+// 				}
+// 			 }
+// 			// TracePrintf(0, "the SECTORSIZE is %d", SECTORSIZE);
+// 			if (node->indirect>0) {
+// 				int *blockbuf = (int*)getBlock(node->indirect);
+// 				for(j = 0; j < SECTORSIZE / 4; j ++) {
+// 					if (blockbuf[j] > 0) {
+// 						free_block[blockbuf[j]] = 1;
+// 						free_block_count--;
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// 	TracePrintf(0, "Finish the init process\n");
+// }
 
 // the name of file is DIRNAMELEN
 // return the inode number of file with given filename
 int path_file(char *pathname, int dir_inum) {
 	// length of pathname
 	int len_name = strlen(pathname);
-	TracePrintf(0, "start path_file, len_name is %d, pathname is %s\n", len_name, pathname);
-	
-	// create a stack for inode number
-	initStack(&s);
+	if (len_name == 0) return dir_inum;
+	TracePrintf(0, "path_file start, len_name is %d, pathname is %s\n", len_name, pathname);
 
 	// use helper to find the inum of the file
-	int curr_index = 0;
-	int curr_inum = dir_inum;
-	TracePrintf(0,"path_file, the curr_inum and dir_inum is %d\n", curr_inum);
-	int inum = path_file_helper(pathname, len_name, curr_index, curr_inum, 0);
-	clear(&s);
+	// int curr_index = 0;
+	// int curr_inum = dir_inum;
+	// TracePrintf(0,"path_file, the curr_inum and dir_inum is %d\n", curr_inum);
+	int inum = path_file_helper(pathname, len_name, 0, dir_inum, 0);
+	TracePrintf(0, "path_file ends. the return inum for the pathname is %d\n", inum);
 	return inum;
 }
 
@@ -171,85 +323,176 @@ int path_file(char *pathname, int dir_inum) {
 
 int path_file_helper(char *pathname,int len_name, int curr_index, int curr_inum, int num_slink) {
 	// check if it is absolute path
-	TracePrintf(0, "the curr_index is %d\n", curr_index);
+	TracePrintf(0, "path_file_helper: the curr_index is %d\n", curr_index);
 	if (curr_index == 0 && pathname[0] == '/') {
-		TracePrintf(0, "it is a absolute path.\n");
+		TracePrintf(0, "path_file_helper: it is a absolute path.\n");
 		curr_inum = 1;
 		return path_file_helper(pathname, len_name, ++curr_index, curr_inum, num_slink);
 	}
 
 	// delete the dup dash
 	while (curr_index < len_name && pathname[curr_index] == '/') curr_index++;
-	TracePrintf(0, "after delete, the index is %d\n:",curr_index);
+	TracePrintf(0, "path_file_helper: after delete, the index is %d\n:",curr_index);
 	
-	// check if the last index is dash .
+	// check if it is the last index.
 	if (curr_index == len_name) {
-		TracePrintf(0, "the last letter is dash, return\n");
+		TracePrintf(0, "path_file_helper: the last letter is dash, return\n");
 		return curr_inum;
 	}
 	
-	// buff the component
-	TracePrintf(0, "deal with the component in the pathname:\n");
+	// buff the my_componentnent
 	int i = 0;
-	char component[DIRNAMELEN];
-    memset(component,'\0',DIRNAMELEN);
+	char name[DIRNAMELEN];
+    memset(name,'\0',DIRNAMELEN);
 	while (curr_index < len_name && pathname[curr_index] != '/') {
-		component[i++] = pathname[curr_index++];
+		name[i++] = pathname[curr_index++];
 	}
-	// TracePrintf(0, "length%d", strlen(component));
-	TracePrintf(0, "the component is %s\n", component);
-	
-	// if the component is .., return the curr_inode as pop stack
-	if (component[0] == "." && component[1] == "." && component[2] == '\0') {
-		if (!empty(&s)) 
-			return path_file_helper(pathname, len_name, curr_index++, pop(&s), num_slink);
-		else 
-			return ERROR;
-	}
-
-	// if the componet is ., just return
-	if (component[0] == "." && component[1] == '\0')
-		return path_file_helper(pathname, len_name, curr_index++, curr_inum, num_slink);
+	TracePrintf(0, "path_file_helper: the name is %s\n", name);
 	
 	// find the inode of the curr file name
-	TracePrintf(0, "print currnet inum before entry: %d\n", curr_inum);
-	curr_inum = entry_query(component, curr_inum);
-	if (curr_inum == -1) {
-		return -1;
+	TracePrintf(0, "path_file_helper: print currnet inum before entry: %d\n", curr_inum);
+	curr_inum = entry_query(name, curr_inum);
+	if (curr_inum == ERROR) {
+		return ERROR;
 	}
-	push(&s, curr_inum);
-	TracePrintf(0, "push a curr_inum node in to stack: the curr_inum is %d\n", curr_inum);
-	return path_file_helper(pathname, len_name, curr_index++, curr_inum, num_slink);
+	return path_file_helper(pathname, len_name, curr_index, curr_inum, num_slink);
 }
 
-// find the inode of given filename in the directory
+/*
+* Get the parent inum and component name of given pathname.
+* Return error if parent is not a dir 
+*/
+// struct my_comp *get_parent(char *pathname, int curr_inum) {
+// 	TracePrintf(0, "get_parent starts...the pathname is %s, the curr_inum is %d\n", pathname, curr_inum);
+// 	// get the parent name and my_component name
+// 	char name[DIRNAMELEN];
+// 	memset(name, '\0', DIRNAMELEN);
+// 	int len = strlen(pathname)-1;
+// 	while(len >= 0 && pathname[len] != '/') {
+// 		len--;
+// 	}
+// 	char parentname[len+2];
+// 	memcpy(parentname, pathname, len+1);
+// 	parentname[len+1] = '\0';
+// 	memcpy(name, pathname+len+1, (strlen(pathname))-len-1);
+// 	TracePrintf(0,"get_parent: the parentname is %s\n", parentname);
+// 	TracePrintf(0, "get_parent: the component name is %s\n", name);
+// 	// get the parent inum
+// 	int par_inum = path_file(parentname, curr_inum);
+
+// 	// if parent inum do not exist or parent is not a dir, return error
+// 	if (par_inum == ERROR || getInode(par_inum)->type != INODE_DIRECTORY) {
+// 		return ERROR;
+// 	}
+
+// 	// store the par_inum and copomnet name into the return type.
+// 	struct my_comp *tmp = (struct my_comp*)malloc(sizeof(struct my_comp));
+// 	tmp->par_inum = par_inum;
+// 	strcpy(tmp->name,name);
+// 	TracePrintf(0, "get_parent ends. the parent inum is %d, the component name is %s\n", tmp->par_inum, tmp->name);
+// 	return tmp;
+// }
+
+/*find the inum of given filename in the directory
+* return error if the path is not valid or there is no such entry 
+*/
 int entry_query(char *filename, int dir_inum) {
 	TracePrintf(0, "entry_query starts... the filename is %s, the curr directory inum is: %d\n", filename, dir_inum);
 	
 	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
 	struct inode *dir_inode = getInode(dir_inum); 
-	// return -1 if this is not a directory
+	
+	// return ERROR if this is not a directory
 	if (dir_inode->type != INODE_DIRECTORY) {
-		return -1;
+		TracePrintf(0, "entry_query: cur path is not a dir\n");
+		return ERROR;
 	}
 
 	// the entry number in this dir file
 	int entry_num = (dir_inode->size) / sizeof(struct dir_entry);
 	int entry_count = 0;
-	TracePrintf(0, "the entry_num is %d", entry_num);
+	TracePrintf(0, "entry_query: the type of curr file is %d\n", dir_inode->type);
+	TracePrintf(0, "entry_query: the entry_num is %d\n", entry_num);
+
+	// loop over the direct block array
+	TracePrintf(0, "entry_query: the entried is this dir is :\n");
+	int i;
+	for (i = 0; i < NUM_DIRECT; i++) {
+		int block_num = dir_inode->direct[i];
+		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
+
+		int j;
+		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+			entry_count++;
+			if (entry_count > entry_num) return ERROR;
+			TracePrintf(0, "entry_query: the name in the dir is %s\n",block_buf[j].name);
+			TracePrintf(0, "entry_query: the inum for this entry is %d\n",block_buf[j].inum);
+			if (strcmp(block_buf[j].name, filename) == 0) {
+				TracePrintf(0, "entry_query: find the file inum%d", block_buf[j].inum);
+				return block_buf[j].inum;
+			}
+			
+		}
+	}
+
+	TracePrintf(0, "entry_query: not found in the dir block, loop the indirect:");
+	// loop over the indirect block, indirect block store the block numbers
+	int *block_buf = (int*)getBlock(dir_inode->indirect);
+	i = 0;
+	for (i = 0; i < SECTORSIZE/4;i++) {
+		if (block_buf[i]>0) {
+			int block_num = block_buf[i];
+			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
+			int j;
+			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+				entry_count++;
+			    if (entry_count > entry_num) return ERROR;
+				if (strcmp(block_buf2[j].name, filename) == 0) {
+					return block_buf2[j].inum;
+				}
+			}
+		}
+		
+	}
+	TracePrintf(0,"entry_query ends. No entry found.");
+	return ERROR;
+}
+
+/*
+search an entry
+*/
+struct dir_entry *search_entry(char *filename, int dir_inum) {
+	TracePrintf(0, "search_entry starts... the filename is %s, the curr directory inum is: %d\n", filename, dir_inum);
+	
+	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
+	struct inode *dir_inode = getInode(dir_inum); 
+	TracePrintf(0, "entry_query: the type of curr file is %d\n", dir_inode->type);
+
+	// return ERROR if this is not a directory
+	if (dir_inode->type != INODE_DIRECTORY) {
+		return ERROR;
+	}
+
+	// the entry number in this dir file
+	int entry_num = (dir_inode->size) / sizeof(struct dir_entry);
+	int entry_count = 0;
+	TracePrintf(0, "the entry_num is %d\n", entry_num);
 
 	// loop over the direct block array
 	int i;
 	for (i = 0; i < NUM_DIRECT; i++) {
 		int block_num = dir_inode->direct[i];
 		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
+
 		int j;
 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 			entry_count++;
-			if (entry_count > entry_num) return -1;
+			if (entry_count > entry_num) return ERROR;
+			TracePrintf(0, "the name in the dir%s\n",block_buf[j].name);
+			TracePrintf(0, "the inum for this entry is %d\n",block_buf[j].inum);
 			if (strcmp(block_buf[j].name, filename) == 0) {
 				TracePrintf(0, "find the file inum%d", block_buf[j].inum);
-				return block_buf[j].inum;
+				return &block_buf[j];
 			}
 			
 		}
@@ -266,25 +509,34 @@ int entry_query(char *filename, int dir_inum) {
 			int j;
 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 				entry_count++;
-			    if (entry_count > entry_num) return -1;
+			    if (entry_count > entry_num) return ERROR;
 				if (strcmp(block_buf2[j].name, filename) == 0) {
-					return block_buf2[j].inum;
+					return &block_buf2[j];
 				}
 			}
 		}
 		
 	}
-	return -1;
+	return ERROR;
 }
 
-// add an entry of given filename
+/*
+add an entry
+*/
 // int add_entry(char *filename, int new_inum, int dir_inum) {
+// 	TracePrintf(0, "add_entry starts..., the name is %s, the inum for entry is %d, the curr_inum is %d\n", filename, new_inum, dir_inum);
 // 	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
 // 	struct inode *dir_inode = getInode(dir_inum); 
-// 	// return -1 if this is not a directory
+// 	// return ERROR if this is not a directory
 // 	if (dir_inode->type != INODE_DIRECTORY) {
-// 		return -1;
+// 		TracePrintf(0,"error: the filename is not valid.");
+// 		return ERROR;
 // 	}
+
+// 	// the entry number in this dir file
+// 	int entry_num = (dir_inode->size) / sizeof(struct dir_entry);
+// 	int entry_count = 0;
+// 	TracePrintf(0, "add_entry: the size of this dir:%d, the size of dir_entry is %d\n", dir_inode->size, sizeof(struct dir_entry));
 
 // 	// loop over the direct block array
 // 	int i;
@@ -295,15 +547,19 @@ int entry_query(char *filename, int dir_inum) {
 // 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 // 			// if the entry is empty, add new entry here
 // 			if (block_buf[j].inum == 0) {
+// 				TracePrintf(0,"add_entry: find a free entry%d\n", j);
 // 				block_buf[j].inum = new_inum;
 // 				memcpy(block_buf[j].name, filename, MAXPATHNAMELEN);
-// 				return 1;
+// 				TracePrintf(0, "add_entry: the name copied is %s\n", block_buf[j].name);
+// 				dir_inode->size = dir_inode->size + sizeof(struct dir_entry);
+// 				TracePrintf(0, "add_entry ends. the updated size is %d\n", dir_inode->size);
+// 				return new_inum;
 // 			}
-			
+// 			TracePrintf(0, "add_entry: the inum of %dth entry is %d, the name is %s\n",j,block_buf[j].inum, block_buf[j].name);
 // 		}
 // 	}
 
-// 	TracePrintf(0, "not found in the dir block, loop the indirect:");
+// 	TracePrintf(0, "add_entry: not found in the dir block, loop the indirect:");
 // 	// loop over the indirect block, indirect block store the block numbers
 // 	int *block_buf = (int*)getBlock(dir_inode->indirect);
 // 	i = 0;
@@ -315,8 +571,11 @@ int entry_query(char *filename, int dir_inum) {
 // 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 // 				// if the entry is empty, add new entry heere
 // 				if (block_buf2[j].inum == 0) {
+// 					block_buf2[j].inum = new_inum;
 // 					memcpy(block_buf2[j].name, filename, MAXPATHNAMELEN);
-// 					return 1;
+// 					dir_inode->size = dir_inode->size + sizeof(struct dir_entry);
+// 					TracePrintf(0, "add_entry ends. the updated size is %d\n", dir_inode->size);
+// 					return new_inum;
 // 				}
 				
 // 			}
@@ -326,6 +585,73 @@ int entry_query(char *filename, int dir_inum) {
 // 	// no tmpty entry available in the dir
 // 	return ERROR;
 // }
+
+/*
+remove an entry 
+*/
+// int rm_entry(char *filename, int inum, int dir_inum) {
+// 	TracePrintf(0, "rm_entry starts..., the name is %s, the inum for entry is %d, the curr_inum is %d\n", filename, new_inum, dir_inum);
+// 	// struct inode *dir_inode = (struct inode*)malloc(sizeof(struct inode));
+// 	struct inode *dir_inode = getInode(dir_inum); 
+// 	// return ERROR if this is not a directory
+// 	if (dir_inode->type != INODE_DIRECTORY) {
+// 		TracePrintf(0,"error: the filename is not valid.");
+// 		return ERROR;
+// 	}
+
+// 	// the entry number in this dir file
+// 	int entry_num = (dir_inode->size) / sizeof(struct dir_entry);
+// 	int entry_count = 0;
+// 	TracePrintf(0, "add_entry: the size of this dir:%d, the size of dir_entry is %d\n", dir_inode->size, sizeof(struct dir_entry));
+
+// 	// loop over the direct block array
+// 	int i;
+// 	for (i = 0; i < NUM_DIRECT; i++) {
+// 		int block_num = dir_inode->direct[i];
+// 		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
+// 		int j;
+// 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+// 			// if the entry is empty, add new entry here
+// 			if (block_buf[j].inum == 0) {
+// 				TracePrintf(0,"add_entry: find a free entry%d\n", j);
+// 				block_buf[j].inum = new_inum;
+// 				memcpy(block_buf[j].name, filename, MAXPATHNAMELEN);
+// 				TracePrintf(0, "add_entry: the name copied is %s\n", block_buf[j].name);
+// 				dir_inode->size = dir_inode->size + sizeof(struct dir_entry);
+// 				TracePrintf(0, "add_entry ends. the updated size is %d\n", dir_inode->size);
+// 				return new_inum;
+// 			}
+// 			TracePrintf(0, "add_entry: the inum of %dth entry is %d, the name is %s\n",j,block_buf[j].inum, block_buf[j].name);
+// 		}
+// 	}
+
+// 	TracePrintf(0, "add_entry: not found in the dir block, loop the indirect:");
+// 	// loop over the indirect block, indirect block store the block numbers
+// 	int *block_buf = (int*)getBlock(dir_inode->indirect);
+// 	i = 0;
+// 	for (i = 0; i < SECTORSIZE/4;i++) {
+// 		if (block_buf[i]>0) {
+// 			int block_num = block_buf[i];
+// 			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
+// 			int j;
+// 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
+// 				// if the entry is empty, add new entry heere
+// 				if (block_buf2[j].inum == 0) {
+// 					block_buf2[j].inum = new_inum;
+// 					memcpy(block_buf2[j].name, filename, MAXPATHNAMELEN);
+// 					dir_inode->size = dir_inode->size + sizeof(struct dir_entry);
+// 					TracePrintf(0, "add_entry ends. the updated size is %d\n", dir_inode->size);
+// 					return new_inum;
+// 				}
+				
+// 			}
+// 		}
+		
+// 	}
+// 	// no tmpty entry available in the dir
+// 	return ERROR;
+// }
+
 
 /*
 handlers for the message
@@ -342,14 +668,17 @@ int open_handler(my_msg *msg, int sender_pid) {
     int dir_inum;
     CopyFrom(sender_pid, &dir_inum, &(msg->data1), sizeof(int));
     TracePrintf(0, "open_handler: the dir_inum after CopyFrom:%d\n", dir_inum);
+    
     // find the inum for the open file
     int open_inum = path_file(pathname,dir_inum);
 
     // 
-    if (open_inum<=0) {
+    if (open_inum == ERROR) {
         msg->type = ERROR;
     }
-    
+    else {
+
+    }
     return open_inum;
 }
 
@@ -358,10 +687,49 @@ int close_handler(int fd) {
 
 }
 
-// create and open the new file
-int create_handler(char *pathname){
+/* 
+ * create and open the new file
+ * return the new file's inum
+*/ 
+// int create_handler(my_msg *msg, int sender_pid){
+// 	TracePrintf(0, "create hander start...\n");
+	
+// 	// get the pathname
+// 	char pathname[MAXPATHNAMELEN];
+// 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) {
+// 		return ERROR;
+// 	}
+// 	TracePrintf(0,"create_handler: the pathname is %s\n", pathname);
+// 	// get the cur inum
+// 	int curr_inum;
+// 	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+// 		return ERROR;
+// 	}
+// 	TracePrintf(0,"create_handler: the curr_inum is %d\n", curr_inum);
+	
+// 	// get_parent(pathname, curr_inum);
+// 	struct my_comp *buff;
+// 	buff = get_parent(pathname, curr_inum);
+// 	TracePrintf(0, "create_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
 
-}
+// 	// add entry
+// 	int inum = entry_query(buff->name, buff->par_inum);
+// 	if (inum != ERROR) {
+// 		TracePrintf(0, "create_handler: the file exists, set it as new\n");
+// 		struct inode *node = getInode(inum);
+// 		node->size = 0;
+// 		// set the return msg data1 as the inum for the filename
+// 		msg->data1 = inum;
+// 	} else {
+// 		TracePrintf(0, "create_handler: the file do not exists, add entry.\n");
+// 		inum = add_entry(buff->name, get_freeInode(), buff->par_inum);
+// 		if (inum != ERROR) {
+// 			msg->data1 = inum;
+// 		}
+// 	}
+// 	TracePrintf(0, "create_handler ends. the new inum is %d\n", inum);
+// 	return inum;
+// }
 
 // This request reads data from an open file, beginning at the current position in the file as represented 
 // by the given file descriptor fd
@@ -373,66 +741,190 @@ int write_handler(int fd, void *buf, int size) {
 
 }
 
-/* create a head link from new file name to the existing oldname
- * return error if the newname already exists
- * return 0 if success
-*/
-// int link_handler(Msg *msg, int sender_pid) {
+// /* create a head link from new file name to the existing oldname
+//  * return error if the newname already exists
+//  * return 0 if success
+// */
+// int link_handler(my_msg *msg, int sender_pid) {
 // 	// read the newname form msg
-// 	char newname[MAXPATHNAMELEN];
-// 	if (CopyFrom(senderPID, newname, msg->addr1, msg->data1+1) == ERROR) {
+// 	char *newname;
+// 	if (CopyFrom(sender_pid, newname, msg->addr1, msg->data1+1) == ERROR) {
 // 		return ERROR;
 // 	}
-
-// 	// firstly find the parent inum of the newname
-
-// 	// if the new name already exists
-// 	if (entry_query(newname, curr_inum) != -1) 
-// 		return ERROR;
+// 	TracePrintf("the new name is %s:\n", newname);
 
 // 	// read oldname and curr_inum from msg
-// 	char oldname[MAXPATHNAMELEN];
+// 	char *oldname;
 // 	int curr_inum = 1;
-// 	if (CopyFrom(senderPID, oldname, msg->addr2, msg->data2+1) == ERROR) {
+// 	if (CopyFrom(sender_pid, oldname, msg->addr2, msg->data2+1) == ERROR) {
 // 		return ERROR;
 // 	}
-// 	if (CopyFrom(senderPID, &curr_inum, &(msg->data3), sizeof(int)) == ERROR) {
+// 	if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int)) == ERROR) {
 // 		return ERROR;
 // 	}
+// 	TracePrintf("the oldname is %s\n", oldname);
+// 	TracePrintf("the curr_inum is %d\n", curr_inum);
+
+// 	// firstly find the parent inum of newname
+// 	int len = strlen(newname);
+// 	while(len>=0 && newname[len] != '/') len--;
+// 	char par_name[len+1];
+// 	memcpy(par_name, newname, len);
+// 	TracePrintf(0, "the parent name is %s\n", par_name);
+// 	int par_inum = path_file(par_name, curr_inum);
+// 	if (par_inum == ERROR) return ERROR;
+// 	TracePrintf(0, "the par_inum is %d\n", par_inum);
+
+// 	// find the my_componentnetn of new name
+// 	char new_my_componentnent[MAXPATHNAMELEN];
+// 	memset(new_my_componentnent,'\0',MAXPATHNAMELEN);
+// 	memcpy(new_my_componentnent, newname+len, strlen(newname)-len);
+
+// 	// if the newname already exists, return ERROR 
+// 	if (entry_query(new_my_componentnent, par_inum) != ERROR) return ERROR;
 
 // 	// find the inum for the oldname, if it is a dir, return error
 // 	int old_inum = entry_query(oldname, curr_inum);
 // 	if (getInode(old_inum)->type == INODE_DIRECTORY) return ERROR;
-
-// 	// find the parent file for this entry to be added
-// 	// copy the parent filename 
-// 	char parent_name[MAXPATHNAMELEN];
-// 	int i = MAXPATHNAMELEN;
-// 	while(i >= 0 && newname[i] != '/') {
-// 		i--;
-// 	}
-// 	for (;i>=0;i--) {
-// 		parent_name[i] = newname[i];
-// 	}
-// 	// find the parent inum
-// 	int parent_inum = path_file();
-
-
-// 	if (parent_inum != -1) {
-// 		add_entry(filename, old_inum, parent_inum);
-// 	}
-
-
-// 	if (add_entry(newname, old_inum, curr_inum) == ERROR) 
+	
+// 	// add the new entry to the parent dir
+// 	if (add_entry(new_my_componentnent, old_inum, curr_inum) == ERROR) 
 // 		return ERROR;
 // }
+
+// /*
+//  *remove the directory enty for the pathname, if it is the last link, clean the inode for this file
+//  *the filename should not be a directory
+//  */
+// int unlink_handler(my_msg *msg, int sender_pid) {
+// 	// read the path name and curr_dir from msg
+// 	char *pathname;
+// 	int curr_inum;
+// 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) {
+// 		return ERROR;
+// 	}
+// 	if (CopyFrom(sender_pid, &curr_inum, msg->addr2, sizeof(int)) == ERROR) {
+// 		return ERROR;
+// 	}
+
+// 	// find the parent inum and component name
+// 	my_component *buf = get_parent(pathname, curr_inum);
+// 	int par_inum = buf->par_inum;
+// 	char name[MAXPATHNAMELEN] = buf->name;
+
+// 	// find the entry address for the component
+// 	(struct dir_entry) *entry = search_entry(name, par_inum);
+
+// 	// get the inum for this filename
+// 	struct inode *node = getInode(entry->inum);
+
+// 	// if it is a dir, return error
+// 	if (getInode(entry->inum)->type == INODE_DIRECTORY) return ERROR;
+
+// 	// set inum as 0, if the nlink is 0, free the inode for this file
+// 	if (node->nlink == 1) {
+// 		free_inode(inum);
+// 	}
+// 	entry->inum = 0;
+// 	return 0;
+// }
+
+// /*
+// * Make a dir. There are two default dir_entry, . and ..
+// * return error if pathname already exist
+// */
+// int mkdir_handler(my_msg *msg, int sender_pid) {
+// 	TracePrintf(0, "mkdir_handler start...\n");
+	
+// 	// get the pathname
+// 	char pathname[MAXPATHNAMELEN];
+// 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) {
+// 		return ERROR;
+// 	}
+// 	TracePrintf(0,"mkdir_handler: the pathname is %s\n", pathname);
+// 	// get the cur inum
+// 	int curr_inum;
+// 	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+// 		return ERROR;
+// 	}
+// 	TracePrintf(0,"mkdir_handler: the curr_inum is %d\n", curr_inum);
+	
+// 	// get_parent(pathname, curr_inum);
+// 	struct my_comp *buff;
+// 	buff = get_parent(pathname, curr_inum);
+// 	TracePrintf(0, "mkdir_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
+
+// 	// check if the parent pathname is valid and is a directory
+// 	if (buff->par_inum == ERROR) return ERROR;
+	
+// 	// check if the name has alreaday exists, if yes, reutrn error, if no, add the entry and alloc the inode
+// 	int inum = entry_query(buff->name, buff->par_inum);
+// 	if (inum != ERROR) {
+// 		TracePrintf(0, "mkdir_handler: the pathname exists, return error\n");
+// 		return ERROR;
+// 	} else {
+// 		TracePrintf(0, "mkdir_handler: allocate a new inode and add entry into its parent file.\n");
+// 		inum = add_entry(buff->name, allocInode(INODE_DIRECTORY), buff->par_inum);
+// 		if (inum != ERROR) {
+// 			msg->data1 = inum;
+// 		}
+// 	}
+// 	TracePrintf(0, "mkdir_handler ends. allocate a %d inode to the new dir.", inum);
+// 	return inum;
+// }
+
+// /*
+// * remove a dir. There are two default dir_entry, . and ..
+// * return error if pathname already exist
+// */
+// int rmdir_handler(my_msg *msg, int sender_pid) {
+// 	TracePrintf(0, "rmdir_handler start...\n");
+	
+// 	// get the pathname
+// 	char pathname[MAXPATHNAMELEN];
+// 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) {
+// 		return ERROR;
+// 	}
+// 	TracePrintf(0,"mkdir_handler: the pathname is %s\n", pathname);
+// 	// get the cur inum
+// 	int curr_inum;
+// 	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+// 		return ERROR;
+// 	}
+// 	TracePrintf(0,"mkdir_handler: the curr_inum is %d\n", curr_inum);
+	
+// 	// get_parent(pathname, curr_inum);
+// 	struct my_comp *buff;
+// 	buff = get_parent(pathname, curr_inum);
+// 	TracePrintf(0, "mkdir_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
+
+// 	// check if the parent pathname is valid and is a directory
+// 	if (buff->par_inum == ERROR) return ERROR;
+	
+// 	// check if the name has alreaday exists, if yes, reutrn error, if no, add the entry and alloc the inode
+// 	int inum = entry_query(buff->name, buff->par_inum);
+// 	if (inum == ERROR) {
+// 		TracePrintf(0, "mkdir_handler: the pathname do not exist, return error\n");
+// 		return ERROR;
+// 	} else {
+// 		TracePrintf(0, "mkdir_handler: allocate a new inode and add entry into its parent file.\n");
+// 		inum = add_entry(buff->name, allocInode(INODE_DIRECTORY), buff->par_inum);
+// 		if (inum != ERROR) {
+// 			msg->data1 = inum;
+// 		}
+// 	}
+// 	TracePrintf(0, "mkdir_handler ends. allocate a %d inode to the new dir.", inum);
+// 	return inum;
+// }
+
 
 int main(int argc, char **argv) {
 	TracePrintf(0, "Running the server process\n");
 	int pid;
 	struct my_msg msg;
-    int senderPID;
+    int sender_pid;
 	init();
+
 	if (Register(FILE_SERVER)  != 0) {
 		fprintf(stderr, "ERROR!!! Failed to initialize the service\n" );
 	}
@@ -443,24 +935,28 @@ int main(int argc, char **argv) {
 	        Exec(argv[1],argv+1);
 	    }
 	}
-	TracePrintf(0, "Running................\n");
+	// char *name = "an";
+	// struct inode *node = get_inode(1);
+	// TracePrintf(0, "try the hash%d:\n",node->type);
+
     while (1) {
-    	senderPID=Receive(&msg);
-    	fprintf((stderr), "sender pid is %d\n", senderPID );
-        if (senderPID==ERROR) {
+    	sender_pid=Receive(&msg);
+    	fprintf((stderr), "sender pid is %d\n", sender_pid );
+        if (sender_pid==ERROR) {
             perror("error receiving message!\n");
             continue;
         }
-        TracePrintf(0, "the size of msg:%d \n", sizeof(msg));
+        // TracePrintf(0, "the size of msg:%d \n", sizeof(msg));
         switch (msg.type) {
-             case OPEN:
-                 open_handler(&msg,senderPID);break;
+            case OPEN:
+                 open_handler(&msg,sender_pid);break;
             // case CREATE:
-            //     create_handler(&myMsg,sender_pid);break;
+            // 	TracePrintf(0, "receive a create msg.\n");
+            //      create_handler(&msg,sender_pid);break;
             // case READ:
-            //     read_handler(&msg,senderPID);break;
+            //     read_handler(&msg,sender_pid);break;
             // case WRITE:
-            //     write_handler(&msg,senderPID);break;
+            //     write_handler(&msg,sender_pid);break;
             // case LINK:
             //     link_handler(&myMsg,sender_pid);break;
             // case UNLINK:
@@ -485,31 +981,13 @@ int main(int argc, char **argv) {
                 perror("message type error!");
                 break;
         }
-
-         }
-//         if (Reply(&myMsg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
+        if (Reply(&msg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
+    }
+//         
 //     }
 	return 0;
 } 
 
-// int main(int argc, char **argv) {
-
-// 	TracePrintf(0, "Running the server process\n");
-// 	char *pathname = "////a/b/c/";
-// 	TracePrintf(0, "nakme:%s", pathname);
-// // 	// path_file(pathname, ROOTINODE);
-// // 	// struct inode *my = getInode(3);
-// // 	/**/
-// 	char name[3] = "tom" ;
-// 	TracePrintf(0, "print the name:%s\n", name);
-// 	(struct my_struct) ex;
-// 	ex = {1,"tom"};
-// 	TracePrintf(0,"print the key and name:%d,%s\n",ex->id,ex->name);
-// 	add_user(ex);
-// 	int value = find_user(1)->name;
-// 	TracePrintf(0, "the name is %s:", value);
-// 	return 0;	
-// } 
 
 
 

@@ -14,6 +14,7 @@ typedef struct File {
 struct File opened[MAX_OPEN_FILES]; 
 int cur_dir = ROOTINODE;
 int initialize = 0;
+
 void initial() {
 	if (initialize) return;
 	int i = 0;	
@@ -24,35 +25,53 @@ void initial() {
 	}
 	initialize = 1;
 }
+
+/*
+* return the fd if inum already opened
+*/
+int is_open(int inum) {
+	int i;
+	for(;i<MAX_OPEN_FILES;i++) {
+		if(opened[i].inum==inum && opened[i].open == 1){
+			return i;
+		}
+	}
+	return -1;
+}
+
 int Open(char *pathname) {
 	initial();
+	// create msg to send
 	my_msg msg;
 	msg.type = OPEN;
 	msg.data1 = cur_dir;
 	msg.data2 = (int)strlen(pathname);
 	msg.addr1 = pathname;
 	fprintf(stderr, "path name in msg library%s\n", (char*)msg.addr1);
-	int fd = 0;
-	for (;fd < MAX_OPEN_FILES; fd ++) {
-		fprintf(stderr, "%d\n", fd);
-		if (opened[fd].open == 0) {
-			break;
-		}
-	}
+
+	// send the msg
 	if (Send(&msg, -1) == ERROR) {
 		// free(msg);
 		return ERROR;
 	}
-	
-	if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
+
+	// receive the return msg
+	if (msg.type == OPEN) {
+		int fd = 0;
+		for (;fd < MAX_OPEN_FILES; fd ++) {
+			fprintf(stderr, "%d\n", fd);
+			if (opened[fd].open == 0) {
+				break;
+			}
+		}
+		if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
 		fprintf(stderr, "fd error \n" );
 		return ERROR;
+		}
+		opened[fd].open = 1;
+		opened[fd].cur_pos = 0;
+		opened[fd].inum = cur_dir;
 	}
-
-	opened[fd].open = 1;
-	opened[fd].cur_pos = 0;
-	opened[fd].inum = cur_dir;
-	// free(msg);
 	return 0;
 }
 int Close(int fd) {
@@ -60,8 +79,47 @@ int Close(int fd) {
 	// opened[fd]->open = 0;
 	return 0;
 }
-int Create(char *pathname) {
 
+/*
+* This request creates and opens the new file named pathname
+*
+*/
+int Create(char *pathname) {
+	initial();
+	// create the create msg
+	my_msg msg;
+    msg.type = CREATE;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.data2 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // find fd for the created file
+    int fd = 0;
+	for (;fd < MAX_OPEN_FILES; fd ++) {
+		fprintf(stderr, "%d\n", fd);
+		if (opened[fd].open == 0) {
+			break;
+		}
+	}
+	if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
+		fprintf(stderr, "fd error \n" );
+		return ERROR;
+	}
+   
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending create message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == CREATE) {
+    	opened[fd].open = 1;
+		opened[fd].cur_pos = 0;
+		opened[fd].inum = msg.data1;
+    }
+	return 0;
 }
 /*
  * Return value of length is stored in msg->wtype field
