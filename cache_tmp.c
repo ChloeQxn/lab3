@@ -1,15 +1,23 @@
-#include "cache.h"
 #include <comp421/filesystem.h>
-
-struct my_struct *inodeHash; 
-
+#include <comp421/iolib.h>
+#include <comp421/yalnix.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "uthash.h"
+// struct of lru list
+struct Nnode{
+	int inum;
+	struct inode *node;
+	struct inode *pre;
+	struct inode *next;
+};
 struct Nnode *Nhead;
 struct Nnode *Ntail;
 int Nsize; 
+
 // init cache
 void initCache() {
-	TracePrintf(0,"enter the init");
-	inodeHash = NULL;
 	Nhead->node = NULL;
 	Nhead->pre = NULL;
 	Nhead->next = Ntail;
@@ -17,11 +25,10 @@ void initCache() {
 	Ntail->pre = Nhead;
 	Ntail->next = NULL;
 	Nsize = 0;
-	TracePrintf(0, "leave the init");
 }
 
-// get inode from disk
-struct inode *get_inode_disk(int i) {
+// get from disk
+struct inode *getInode(int i) {
 	int blockIndex = 1 + (i) / (BLOCKSIZE/INODESIZE);
 	void *buf = malloc(SECTORSIZE);
 	ReadSector(blockIndex, buf);
@@ -31,6 +38,14 @@ struct inode *get_inode_disk(int i) {
 	free(buf);
 	return node;
 }
+
+struct my_struct {  
+    int ikey;                    /* key */  
+    struct Nnode *node;
+	UT_hash_handle hh;           
+    };  
+
+struct my_struct *inodeHash = NULL; 
 
 // hash interface
 struct my_struct *find_inode(int ikey) {  
@@ -57,41 +72,22 @@ void delete_inode(int ikey) {
     HASH_FIND_INT(inodeHash, &ikey, s);  
     if (s!=NULL) {  
       HASH_DEL(inodeHash, s);   
-      free(s);    
-      }           
+      free(s);               
 } 
-
-
-/* 
-*add a new inode into cache. add it into hash and add it into tail of list
-*/
-void add_inode_cache(int inum, struct inode* node){
-	// if cache is full, delete the head from hash and list
-	if (Nsize>=INODE_CACHESIZE) {
+///////////////
+// list interfacevoid add_inode_cache(int inum, (struct inode) *node)
+void add_inode_cache(int inum, (struct inode) *node){
+	if (Nsize>=INODE_HASH_SIZE) {
+		// delete the head from hash and list
+		int inum = Nhead->inum;
 		free(Nhead->next);
 		Nhead->next = Nhead->next->next;
 		Nhead->next->pre= Nhead;
 		delete_inode(inum);
-		Nsize--;
 	}
-	// create a Nnode, and add it to list and hash
-	struct Nnode* nnode = (struct Nnode*)malloc(sizeof(struct Nnode));
-	nnode->node = node;
-	add_inode(inum, nnode);
-	Ntail->pre->next = nnode;
-	nnode->pre = Ntail->pre;
-	nnode->next = Ntail;
-	Ntail->pre = nnode;
-	Nsize++;
-}
-/* 
-*	update Nnode in the list
-*/
-void update_Nnode_list(struct Nnode *node) {
-	// delete it from list
-	node->pre->next = node->next;
-	node->next->pre = node->pre;
-	// put it to the tail
+	// add to hash and add to the tail
+	struct Nnode* node = (struct Nnode*)malloc(sizeof(struct Nnode));
+	add_inode(inum, node);
 	Ntail->pre->next = node;
 	node->pre = Ntail->pre;
 	node->next = Ntail;
@@ -99,24 +95,20 @@ void update_Nnode_list(struct Nnode *node) {
 }
 
 
-
-// get inode with given inum, if it is in cache, 
-struct inode *getInode(int inum) {
-	TracePrintf(0, "getInode starts. the inum is %d\n", inum);
+struct inode *get_inode(inum) {
 	struct my_struct *tmp = find_inode(inum);
 	struct inode *node;
-	
 	// if the inode is not in the cache, read it from the disk
 	if (tmp == NULL) {
 		TracePrintf(0, "inode of %d is not in cache, read it from disk.", inum);
-		node = get_inode_disk(inum);
-		// put it into cache
+		node = getInode(inum);
+		// put it into hashtable
 		add_inode_cache(inum, node);
 	} else {
-		// it already in cache, get it from hash, and update its location in the list
+		// it already in cache
 		TracePrintf(0, "inode of %d is already in cache.", inum);
-		node = tmp->node->node;
-		update_Nnode_list(tmp->node);
+		struct Nnode *
+		node = find_inode(inum)->node;
 	}
 	return node;
 }
