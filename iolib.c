@@ -185,7 +185,25 @@ int ReadLink(char *pathname, char *buf, int len) {
 
 }
 int MkDir(char *pathname) {
-
+	// create the msg
+	my_msg msg;
+    msg.type = MKDIR;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.data2 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending create message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == MKDIR) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
 int RmDir(char *pathname) {
 

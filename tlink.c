@@ -8,12 +8,13 @@ main()
 {
 	int status;
 
-	status = Create("/a");
+	status = MkDir("/a");
 	printf("Create status %d\n", status);
-	status = Create("/a");
-	printf("Create status %d\n", status);
-	status = Open("/a");
-	printf("open status %d\n", status);
+	// status = Create("/a");
+	// printf("Create status %d\n", status);
+	// status = Open("/a");
+	// printf("open:q
+	//  status %d\n", status);
 
 
 
