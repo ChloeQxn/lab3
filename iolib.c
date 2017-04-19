@@ -173,7 +173,27 @@ int Seek(int fd, int offset, int whence) {
 
 }
 int Link(char *oldname, char *newname) {
-
+	// create the msg
+	my_msg msg;
+    msg.type = LINK;
+    msg.addr1 = oldname;
+    msg.data1 = (int) strlen(oldname);
+    msg.addr2 = newname;
+    msg.data2 = (int) strlen(newname);
+    msg.data3 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending create message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == LINK) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
 int Unlink(char *pathname) {
 

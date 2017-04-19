@@ -8,12 +8,14 @@
 // struct of inode lru list
 struct Nnode{
 	int inum;
+	char dirty;
 	struct inode *node;
 	struct Nnode *pre;
 	struct Nnode *next;
 };
 
 struct Bnode{
+	char dirty;
 	int index;
 	void *buf;
 	struct Bnode *pre;
