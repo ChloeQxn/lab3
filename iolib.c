@@ -115,6 +115,7 @@ int Create(char *pathname) {
     
     // receive the return msg
     if (msg.type == CREATE) {
+    	if (msg.data1 == -1) return ERROR;
     	opened[fd].open = 1;
 		opened[fd].cur_pos = 0;
 		opened[fd].inum = msg.data1;

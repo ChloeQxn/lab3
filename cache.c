@@ -1,24 +1,7 @@
 #include "cache.h"
 #include <comp421/filesystem.h>
 
-struct my_struct *inodeHash; 
 
-struct Nnode *Nhead;
-struct Nnode *Ntail;
-int Nsize; 
-// init cache
-void initCache() {
-	TracePrintf(0,"enter the init");
-	inodeHash = NULL;
-	Nhead->node = NULL;
-	Nhead->pre = NULL;
-	Nhead->next = Ntail;
-	Ntail->node = NULL;
-	Ntail->pre = Nhead;
-	Ntail->next = NULL;
-	Nsize = 0;
-	TracePrintf(0, "leave the init");
-}
 
 // get inode from disk
 struct inode *get_inode_disk(int i) {

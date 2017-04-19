@@ -40,17 +40,23 @@ struct my_comp {
 
 // hashtable for the inodes
 struct my_struct *inodeHash; 
-
+struct my_struct2 *blockHash;
 // inode list for the inodes cache
 struct Nnode *Nhead;
 struct Nnode *Ntail;
 int Nsize; 
+struct Bnode *Bhead;
+struct Bnode *Btail;
+int Bsize;
 // init cache
 void initCache() {
 	TracePrintf(0,"enter the init cache\n");
 	inodeHash = NULL;
 	Nhead = NULL;
 	Ntail = NULL;
+	blockHash = NULL;
+	Bhead = NULL;
+	Btail = NULL;
 	TracePrintf(0, "leave the init cache\n");
 }
 // get inode from disk
@@ -67,10 +73,23 @@ struct inode *get_inode_disk(int i) {
 	return node;
 }
 
+// // get the buff of the block with given block number
+void *get_block_disk(int blockIndex) {
+	void *buf = malloc(SECTORSIZE);
+	ReadSector(blockIndex, buf);
+	return buf;
+}
+
 // hash interface
 struct my_struct *find_inode(int ikey) {  
     struct my_struct *s;  
 HASH_FIND_INT(inodeHash, &ikey, s );  
+return s;  
+} 
+
+struct my_struct2 *find_Bnode(int ikey) {  
+    struct my_struct2 *s;  
+HASH_FIND_INT(blockHash, &ikey, s );  
 return s;  
 }  
 
@@ -88,12 +107,36 @@ void add_inode(int ikey, struct Nnode* node) {
     // strcpy(s-> value, value_buf);  
 } 
 
+// add inode into hashtable
+void add_block(int ikey, struct Bnode* node) {  
+    struct my_struct2 *s;  
+    HASH_FIND_INT(blockHash, &ikey, s);  /* 插入前先查看key值是否已经在hash表inodeHash里面了 */  
+    if (s==NULL) {  
+      s = (struct my_struct2*)malloc(sizeof(struct my_struct2));  
+      s->ikey = ikey; 
+      s->node = node; 
+      HASH_ADD_INT(blockHash, ikey, s );  /* 这里必须明确告诉插入函数，自己定义的hash结构体中键变量的名字 */  
+      Bsize++;
+    }  
+    // strcpy(s-> value, value_buf);  
+} 
+
 // delete inode from hashtable
 void delete_inode(int ikey) {  
     struct my_struct *s = NULL;  
     HASH_FIND_INT(inodeHash, &ikey, s);  
     if (s!=NULL) {  
       HASH_DEL(inodeHash, s);   
+      free(s);    
+      }           
+} 
+
+// delete inode from hashtable
+void delete_block(int ikey) {  
+    struct my_struct2 *s = NULL;  
+    HASH_FIND_INT(blockHash, &ikey, s);  
+    if (s!=NULL) {  
+      HASH_DEL(blockHash, s);   
       free(s);    
       }           
 } 
@@ -110,6 +153,17 @@ struct Nnode *new_Nnode(struct inode *node, int inum) {
 	return nnode;
 }
 
+// create an inode of linked list
+struct Bnode *new_Bnode(void *buf, int index) {
+	// TracePrintf(0,  "new_Nnode starts\n");
+	struct Bnode* nnode = (struct Bnode*)malloc(sizeof(struct Bnode));
+	nnode->buf = buf;
+	nnode->index = index;
+	nnode->pre = NULL;
+	nnode->next = NULL;
+	// TracePrintf(0, "new_Nnode ends\n");
+	return nnode;
+}
 // add inode to the tail of linked list
 void add_inode_tail(struct Nnode *nnode) {
 	// TracePrintf(0, "add_inode_tail starts\n");
@@ -122,6 +176,20 @@ void add_inode_tail(struct Nnode *nnode) {
 		Ntail = nnode;
 	}
 	Nsize++;
+	// TracePrintf(0, "add_inode_tail ends\n");
+}
+
+void add_block_tail(struct Bnode *nnode) {
+	// TracePrintf(0, "add_inode_tail starts\n");
+	if (Btail == NULL) {
+		Btail = nnode;
+		Bhead = nnode;
+	} else {
+		Btail->next = nnode;
+		nnode->pre = Btail;
+		Btail = nnode;
+	}
+	Bsize++;
 	// TracePrintf(0, "add_inode_tail ends\n");
 }
 
@@ -147,6 +215,30 @@ void add_inode_cache(int inum, struct inode* node){
 	add_inode_tail(nnode);
 	TracePrintf(0, "add_inode_cache finish");
 }
+
+/* 
+*add a new inode into cache. add it into hash and add it into tail of list
+*/
+void add_block_cache(int index, void *buf){
+	TracePrintf(0,"add_block_cache starts, the Bsize is %d\n", Bsize);
+	// if cache is full, delete the head from hash and list
+	if (Bsize>=BLOCK_CACHESIZE) {
+		TracePrintf(0, "add_block_cache: cache is full.\n");
+		free(Bhead->next);
+		Bhead->next = Bhead->next->next;
+		Bhead->next->pre= Bhead;
+		delete_block(index);
+		Bsize--;
+	}
+	// create a Nnode
+	struct Bnode* nnode = new_Bnode(buf, index);
+	// add it to hash
+	add_block(index, nnode);
+	// add it to list
+	add_block_tail(nnode);
+	TracePrintf(0, "add_block_cache finish");
+}
+
 /* 
 *	update Nnode in the list
 */
@@ -176,6 +268,32 @@ void update_Nnode_list(struct Nnode *nnode) {
 	TracePrintf(0, "update_Nnode_list ends\n");
 }
 
+void update_Bnode_list(struct Bnode *nnode) {
+	TracePrintf(0,"update_Bnode_list start\n");
+	if (Btail == nnode) return;
+	// delete it from list
+	if (Bhead == nnode) {
+		Bhead = Bhead->next;
+	} else {
+		nnode->pre->next = nnode->next;
+		nnode->next->pre = nnode->pre;
+	}
+	
+	// TracePrintf(0, "loop the list.");
+	// struct Nnode *tmp = Nhead;
+	// while(tmp!=NULL) {
+	// 	TracePrintf(0,"%d", tmp->inum);
+	// 	tmp = tmp->next;
+	// }
+	
+	// put it to the tail
+	Btail->next = nnode;
+	nnode->pre = Btail;
+	Btail = nnode;
+	nnode->next = NULL;
+	TracePrintf(0, "update_Bnode_list ends\n");
+}
+
 
 
 // get inode with given inum, if it is in cache, 
@@ -202,15 +320,33 @@ struct inode *getInode(int inum) {
 	return node;
 }
 
+// get inode with given inum, if it is in cache, 
+void *getBlock(int index) {
+	TracePrintf(0, "getBlock starts. the index is %d\n", index);
+	struct my_struct2 *tmp = find_Bnode(index);
+	void *buf;
+	
+	// if the inode is not in the cache, read it from the disk
+	if (tmp == NULL) {
+		TracePrintf(0, "block of %d is not in cache, read it from disk.\n", index);
+		buf = get_block_disk(index);
+		// TracePrintf(0, "try to put it into cache");
+		// put it into cache
+		add_block_cache(index, buf);
+	} else {
+		// it already in cache, get it from hash, and update its location in the list
+		TracePrintf(0, "block of %d is already in cache.\n", index);
+		buf = tmp->node->buf;
+		// TracePrintf(0, "getInode: get the node in the hash");
+		update_Bnode_list(tmp->node);
+	}
+	TracePrintf(0, "getBlock ends.\n");
+	return buf;
+}
 
 ///////////////////////////////////////////////////////////////////////////
 
-// // get the buff of the block with given block number
-void *get_block_disk(int blockIndex) {
-	void *buf = malloc(SECTORSIZE);
-	ReadSector(blockIndex, buf);
-	return buf;
-}
+
 
 // /*
 //  * free the inode of given index
@@ -432,13 +568,14 @@ struct my_comp *get_parent(char *pathname, int curr_inum) {
 	// get the parent inum
 	int par_inum = path_file(parentname, curr_inum);
 
-	// if parent inum do not exist or parent is not a dir, return error
-	if (par_inum == ERROR || getInode(par_inum)->type != INODE_DIRECTORY) {
-		return ERROR;
-	}
-
 	// store the par_inum and copomnet name into the return type.
 	struct my_comp *tmp = (struct my_comp*)malloc(sizeof(struct my_comp));
+	// if parent inum do not exist or parent is not a dir, return error
+	if (par_inum == ERROR || getInode(par_inum)->type != INODE_DIRECTORY) {
+		TracePrintf(0,"get_parent: the paretn is not a dir.\n");
+		tmp->par_inum = -1;
+		return tmp;
+	}
 	tmp->par_inum = par_inum;
 	strcpy(tmp->name,name);
 	TracePrintf(0, "get_parent ends. the parent inum is %d, the component name is %s\n", tmp->par_inum, tmp->name);
@@ -471,7 +608,7 @@ int entry_query(char *filename, int dir_inum) {
 	int i;
 	for (i = 0; i < NUM_DIRECT; i++) {
 		int block_num = dir_inode->direct[i];
-		struct dir_entry *block_buf = (struct dir_entry*)get_block_disk(block_num);
+		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
 
 		int j;
 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
@@ -480,7 +617,7 @@ int entry_query(char *filename, int dir_inum) {
 			TracePrintf(0, "entry_query: the name in the dir is %s\n",block_buf[j].name);
 			TracePrintf(0, "entry_query: the inum for this entry is %d\n",block_buf[j].inum);
 			if (strcmp(block_buf[j].name, filename) == 0) {
-				TracePrintf(0, "entry_query: find the file inum%d", block_buf[j].inum);
+				TracePrintf(0, "entry_query: find the file inum%d\n", block_buf[j].inum);
 				return block_buf[j].inum;
 			}
 			
@@ -489,12 +626,12 @@ int entry_query(char *filename, int dir_inum) {
 
 	TracePrintf(0, "entry_query: not found in the dir block, loop the indirect:");
 	// loop over the indirect block, indirect block store the block numbers
-	int *block_buf = (int*)get_block_disk(dir_inode->indirect);
+	int *block_buf = (int*)getBlock(dir_inode->indirect);
 	i = 0;
 	for (i = 0; i < SECTORSIZE/4;i++) {
 		if (block_buf[i]>0) {
 			int block_num = block_buf[i];
-			struct dir_entry *block_buf2 = (struct dir_entry*)get_block_disk(block_num);
+			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
 			int j;
 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 				entry_count++;
@@ -583,7 +720,7 @@ int add_entry(char *filename, int dir_inum){
 	
 	// return ERROR if this is not a directory
 	if (dir_inode->type != INODE_DIRECTORY) {
-		TracePrintf(0, "add_entry : cur path is not a dir\n");
+		TracePrintf(0, "add_entry : cur path is not a dir. add_entry ends.\n");
 		return ERROR;
 	}
 
@@ -598,7 +735,7 @@ int add_entry(char *filename, int dir_inum){
 	int i;
 	for (i = 0; i < NUM_DIRECT; i++) {
 		int block_num = dir_inode->direct[i];
-		struct dir_entry *block_buf = (struct dir_entry*)get_block_disk(block_num);
+		struct dir_entry *block_buf = (struct dir_entry*)getBlock(block_num);
 
 		int j;
 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
@@ -620,12 +757,12 @@ int add_entry(char *filename, int dir_inum){
 
 	TracePrintf(0, "entry_query: not found in the dir block, loop the indirect:");
 	// loop over the indirect block, indirect block store the block numbers
-	int *block_buf = (int*)get_block_disk(dir_inode->indirect);
+	int *block_buf = (int*)getBlock(dir_inode->indirect);
 	i = 0;
 	for (i = 0; i < SECTORSIZE/4;i++) {
 		if (block_buf[i]>0) {
 			int block_num = block_buf[i];
-			struct dir_entry *block_buf2 = (struct dir_entry*)get_block_disk(block_num);
+			struct dir_entry *block_buf2 = (struct dir_entry*)getBlock(block_num);
 			int j;
 			for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 				if (block_buf2[j].inum == 0) {
@@ -699,7 +836,7 @@ int close_handler(int fd) {
  * create and open the new file, the file type is regular
  * return the new file's inum
 */ 
-int create_handler(my_msg *msg, int sender_pid){
+void create_handler(my_msg *msg, int sender_pid){
 	TracePrintf(0, "create hander start...\n");
 	
 	// get the pathname
@@ -720,7 +857,13 @@ int create_handler(my_msg *msg, int sender_pid){
 	buff = get_parent(pathname, curr_inum);
 	TracePrintf(0, "create_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
 
-	// add entry
+	if (getInode(buff->par_inum)->type != INODE_DIRECTORY) {
+		TracePrintf(0, "create_handler: the parent is not a dir. reply a msg with data -1. create ends.\n");
+		msg->data1 = -1;
+		return;
+	}
+
+	// parent is valid, add entry in it
 	int inum = entry_query(buff->name, buff->par_inum);
 	if (inum != ERROR) {
 		TracePrintf(0, "create_handler: the file exists, set it as new\n");
@@ -740,7 +883,7 @@ int create_handler(my_msg *msg, int sender_pid){
 		msg->data1 = inum;
 	}
 	TracePrintf(0, "create_handler ends. the new inum is %d\n", inum);
-	return inum;
+	return;
 }
 
 // This request reads data from an open file, beginning at the current position in the file as represented 
@@ -995,6 +1138,7 @@ int main(int argc, char **argv) {
         }
         if (Reply(&msg,sender_pid)==ERROR) fprintf(stderr, "Error replying to pid %d\n",sender_pid);
     }
+    terminate();
 //         
 //     }
 	return 0;

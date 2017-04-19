@@ -13,6 +13,12 @@ struct Nnode{
 	struct Nnode *next;
 };
 
+struct Bnode{
+	int index;
+	void *buf;
+	struct Bnode *pre;
+	struct Bnode *next;
+};
 // struct of inode hash
 struct my_struct {  
     int ikey;                    /* key */  
@@ -20,6 +26,11 @@ struct my_struct {
 	UT_hash_handle hh;           
 };  
 
+struct my_struct2 {  
+    int ikey;                    /* key */  
+    struct Bnode *node;
+	UT_hash_handle hh;           
+};  
 // // init cache
 // void initCache();
 
