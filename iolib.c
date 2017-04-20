@@ -8,6 +8,7 @@
 typedef struct File {
 	int inum;
 	int cur_pos;
+	int size;
 	int open; //1 means opened, 0 means closed
 }File;
 
@@ -41,14 +42,13 @@ int is_open(int inum) {
 
 int Open(char *pathname) {
 	initial();
+
 	// create msg to send
 	my_msg msg;
 	msg.type = OPEN;
 	msg.data1 = cur_dir;
 	msg.data2 = (int)strlen(pathname);
 	msg.addr1 = pathname;
-	fprintf(stderr, "path name in msg library%s\n", (char*)msg.addr1);
-
 	// send the msg
 	if (Send(&msg, -1) == ERROR) {
 		// free(msg);
@@ -57,6 +57,7 @@ int Open(char *pathname) {
 
 	// receive the return msg
 	if (msg.type == OPEN) {
+		if (msg.data1 == -1) return ERROR;
 		int fd = 0;
 		for (;fd < MAX_OPEN_FILES; fd ++) {
 			fprintf(stderr, "%d\n", fd);
@@ -68,15 +69,11 @@ int Open(char *pathname) {
 		fprintf(stderr, "fd error \n" );
 		return ERROR;
 		}
+		fprintf(stderr, "open success. the open data1%d\n", msg.data1);
 		opened[fd].open = 1;
 		opened[fd].cur_pos = 0;
-		opened[fd].inum = cur_dir;
+		opened[fd].inum = msg.data1;
 	}
-	return 0;
-}
-int Close(int fd) {
-	// if (fd < 0 || fd > MAX_OPEN_FILES) return ERROR;
-	// opened[fd]->open = 0;
 	return 0;
 }
 
@@ -185,7 +182,7 @@ int Link(char *oldname, char *newname) {
     
     // send the msg
     if (Send(&msg,-1)==ERROR) {
-        perror("error sending create message");
+        perror("error sending link message");
         return ERROR;
     }
     
@@ -196,14 +193,73 @@ int Link(char *oldname, char *newname) {
 	return 0;
 }
 int Unlink(char *pathname) {
-
+	// create the msg
+	my_msg msg;
+    msg.type = UNLINK;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.data2 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending unlink message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == UNLINK) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
 int SymLink(char *oldname, char *newname) {
-
+	// create the msg
+	my_msg msg;
+    msg.type = SYMLINK;
+    msg.addr1 = oldname;
+    msg.data1 = (int) strlen(oldname);
+    msg.addr2 = newname;
+    msg.data2 = (int) strlen(newname);
+    msg.data3 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending link message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == SYMLINK) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
+
 int ReadLink(char *pathname, char *buf, int len) {
-
+	my_msg msg;
+    msg.type = READLINK;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.addr2 = buf;
+    msg.data2 = len;
+    msg.data3 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending link message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == READLINK) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
+
 int MkDir(char *pathname) {
 	// create the msg
 	my_msg msg;
@@ -226,17 +282,116 @@ int MkDir(char *pathname) {
 	return 0;
 }
 int RmDir(char *pathname) {
-
+	// create the msg
+	my_msg msg;
+    msg.type = RMDIR;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.data2 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending RmDir message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == MKDIR) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
-int ChDir(char *pathname) {
 
+int ChDir(char *pathname) {
+	// create the msg
+	my_msg msg;
+    msg.type = CHDIR;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.data2 = cur_dir;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending RmDir message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == CHDIR) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+    cur_dir = msg.data1;
+    return 0;
 }
 int Stat(char *pathname, struct Stat *statbuf) {
+	// create the msg
+	my_msg msg;
+    msg.type = STAT;
+    msg.addr1 = pathname;
+    msg.data1 = (int) strlen(pathname);
+    msg.data2 = cur_dir;
+    msg.addr2 = statbuf;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending stat message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == STAT) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+    return 0;
 
 }
 int Sync() {
-
+	// create the msg
+	my_msg msg;
+    msg.type = SYNC;
+  	msg.data1 = -1;
+    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    
+    // send the msg
+    if (Send(&msg,-1)==ERROR) {
+        perror("error sending sync message");
+        return ERROR;
+    }
+    
+    // receive the return msg
+    if (msg.type == SYNC) {
+    	if (msg.data1 == -1) return ERROR;
+    }
+	return 0;
 }
+
 int Shutdown() {
+ 	initial();
+    my_msg msg;
+    msg.type=SHUTDOWN;
 
+    if (Send(&msg,-FILE_SERVER)==ERROR) {
+        perror("error sending shutdown message");
+        return ERROR;
+    }
+
+     if (msg.type!=ERROR) {
+        printf("file server is shutdown!\n");
+        return 0;
+    } else
+        return ERROR;
 }
+
+int Close(int fd) {
+	fprintf(stderr, "CLOSE\n");
+	initial();
+	if (fd < 0 || fd > MAX_OPEN_FILES) return ERROR;
+	opened[fd].open = 0;
+	return 0;
+}
+
+
+

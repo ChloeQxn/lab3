@@ -27,8 +27,8 @@
 #	For example, the Makefile will make test1 out of test1.c,
 #	if you have a file named test1.c in this directory.
 #
-
-ALL = yfs iolib.a topen2 tlink 
+TEST = topen2 tlink tcreate tcreate2 writeread
+ALL = yfs iolib.a $(TEST)
 
 #
 #	You must modify the YFS_OBJS and YFS_SRCS definitions below.
@@ -55,7 +55,7 @@ IOLIB_SRCS = iolib.c
 #	below here.  If you want to, however, you may modify things
 #	such as the definition of CFLAGS, for example.
 #
-
+   
 LANG = gcc
 
 PUBLIC_DIR = /clear/courses/comp421/pub
@@ -81,7 +81,7 @@ iolib.a: $(IOLIB_OBJS)
 	rm -f $@
 	ar rv $@ $(IOLIB_OBJS)
 	ranlib $@
-
+$(TEST): iolib.a
 mkyfs: mkyfs.c
 	$(CC) $(CPPFLAGS) -o mkyfs mkyfs.c
 
