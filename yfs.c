@@ -377,7 +377,7 @@ struct inode *get_inode_block(int i) {
 	struct inode* node = (struct inode*)malloc(sizeof(struct inode));
 	int offset = i % (BLOCKSIZE/INODESIZE);
 	memcpy(node, (struct inode*)buf + offset, sizeof(struct inode));
-	free(buf);
+	// free(buf);
 	// TracePrintf(0, "get inode from disk ends");
 	return node;
 }
@@ -1810,47 +1810,21 @@ void write_handler(my_msg* msg, int pid) {
 * write all dirty inode to cached block and write all dirty blocks into disk
 */
 void sync_handler(my_msg *msg, int sender_pid) {
-	// TracePrintf(0,"sync_handler starts...");
-	// struct Nnode *tmp = Nhead;
-	// while(tmp != NULL) {
-	// 	TracePrintf(0,"sync_handler:write inode %d to block", tmp->inum);
-	// 	if (tmp->dirty == '1') {
-	// 		TracePrintf(0,"syn_handler: write inode %d", tmp->inum);
-	// 		write_inode_block(tmp->inum);
-	// 	}
-	// 	tmp = tmp->next;
-	// }
-	getInode(2);
-	TracePrintf(0, "size %d\n", Nsize);
-	TracePrintf(0, "head inum %d\n", Nhead->inum);
-	TracePrintf(0, "tead inum %d\n", Nhead->inum);
-	getInode(3);
-	TracePrintf(0, "head inum %d\n", Nhead->inum);
-	TracePrintf(0, "tead inum %d\n", Ntail->inum);
-	getInode(4);
-	TracePrintf(0, "head inum %d\n", Nhead->inum);
-	TracePrintf(0, "tead inum %d\n", Ntail->inum);
-	TracePrintf(0, "size %d\n", Nsize);
-	getInode(2);
-	TracePrintf(0, "head inum %d\n", Nhead->inum);
-	TracePrintf(0, "tead inum %d\n", Ntail->inum);
-	TracePrintf(0, "size %d\n", Nsize);
-
-	if (Nhead->next == NULL) TracePrintf(0,"fsdadjfskla");
-	// print the inode list
+	TracePrintf(0,"sync_handler starts...");
+	
+	// write the inode list to block cache
 	struct Nnode *tmp = Nhead;
-	int i = 0;
-	while(i<3) {
-		TracePrintf(0,"inum %d, dirtry %s\n", tmp->inum, tmp->dirty);
-		// if (tmp->dirty == '1') {
-		// 	TracePrintf(0,"syn_handler: write inode %d", tmp->inum);
-		// 	write_inode_block(tmp->inum);
-		// }
-
+	while(tmp!=NULL) {
+		TracePrintf(0,"sync_handler: print the list:inum %d, dirty %c\n", tmp->inum, tmp->dirty);
+		if (tmp->dirty == '1') {
+			TracePrintf(0,"syn_handler: write inode %d\n", tmp->inum);
+			write_inode_block(tmp->inum);
+		}
 		tmp = tmp->next;
 	}
-
 	TracePrintf(0, "syn_handler: wiret inode to block complete\n");
+
+	// write block cache into disk
 	struct Bnode *tmp2 = Bhead;
 	while(tmp2 != NULL) {
 		TracePrintf(0, "syn_handler: block list index %d\n", tmp2->index);
@@ -1860,7 +1834,7 @@ void sync_handler(my_msg *msg, int sender_pid) {
 		}
 		tmp2 = tmp2->next;
 	}
-	// test for sync
+	TracePrintf(0,"sync_handler ends.\n");
 
 }
 
