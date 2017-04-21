@@ -1,65 +1,58 @@
 ** YFS      level 5 tracing enabled **
 YFS      Running the server process
 YFS      Enter the init pocess...
-YFS      init: the num of block is1426, the num of inodes is 47
+YFS      enter the init cache
+YFS      leave the init cache
+YFS      init cacheYFS      init: the num of block is1426, the num of inodes is 47
 YFS      Finish the init process
 YFS      Finished the register
-YFS      try the hash1:
-YFS      receive a create msg.
-YFS      create hander start...
-YFS      create_handler: the pathname is /a
-YFS      create_handler: the curr_inum is 1
-YFS      get_parent starts...the pathname is /a, the curr_inum is 1
-YFS      get_parent: the parentname is /
-YFS      get_parent: the component name is a
-YFS      path_file start, len_name is 1, pathname is /
-YFS      path_file_helper: the curr_index is 0
-YFS      path_file_helper: it is a absolute path.
-YFS      path_file_helper: the curr_index is 1
-YFS      path_file_helper: after delete, the index is 1
-:YFS      path_file_helper: the last letter is dash, return
-YFS      path_file ends. the return inum for the pathname is 1
-YFS      get_parent ends. the parent inum is 1, the component name is a
-YFS      create_handler: the par_inum is 1, the component name is a
-YFS      entry_query starts... the filename is a, the curr directory inum is: 1
-YFS      entry_query: the type of curr file is 1
-YFS      entry_query: the entry_num is 2
-YFS      entry_query: the entried is this dir is :
-YFS      entry_query: the name in the dir is .
-YFS      entry_query: the inum for this entry is 1
-YFS      entry_query: the name in the dir is ..
-YFS      entry_query: the inum for this entry is 1
-YFS      create_handler: the file do not exists, add entry.
-YFS      get_freeInode starts...
-YFS      get a free inode 2
-YFS      add_entry starts..., the name is a, the inum for entry is 2, the curr_inum is 1
-YFS      add_entry: the size of this dir:64, the size of dir_entry is 32
-YFS      add_entry: the inum of 0th entry is 1, the name is .
-YFS      add_entry: the inum of 1th entry is 1, the name is ..
-YFS      add_entry: find a free entry2
-YFS      add_entry: the name copied is a
-YFS      add_entry ends. the updated size is 96
-YFS      create_handler ends. the new inum is 2
-YFS      receive a create msg.
-YFS      create hander start...
-YFS      create_handler: the pathname is /a/b
-YFS      create_handler: the curr_inum is 1
-YFS      get_parent starts...the pathname is /a/b, the curr_inum is 1
-YFS      get_parent: the parentname is /a/
-YFS      get_parent: the component name is b
-YFS      path_file start, len_name is 3, pathname is /a/
-YFS      path_file_helper: the curr_index is 0
-YFS      path_file_helper: it is a absolute path.
-YFS      path_file_helper: the curr_index is 1
-YFS      path_file_helper: after delete, the index is 1
-:YFS      path_file_helper: the name is a
-YFS      path_file_helper: print currnet inum before entry: 1
-YFS      entry_query starts... the filename is a, the curr directory inum is: 1
-YFS      entry_query: the type of curr file is 1
-YFS      entry_query: the entry_num is 2
-YFS      entry_query: the entried is this dir is :
-YFS      entry_query: the name in the dir is .
-YFS      entry_query: the inum for this entry is 1
-YFS      entry_query: the name in the dir is ..
-YFS      entry_query: the inum for this entry is 1
-YFS      path_file ends. the return inum for the pathname is -1
+YFS      receive a sync msg~~~~~~~~~~~~~~
+YFS      getInode starts. the inum is 2
+YFS      inode of 2 is not in cache, read it from cached block.
+YFS      getBlock starts. the index is 1
+YFS      block of 1 is not in cache, read it from disk.
+YFS      add_block_cache starts, the Bsize is 0
+YFS      add_block_cache finishYFS      getBlock ends.
+YFS      add to cache, the nsize is 0
+YFS      add inode cache :ew a inode 2
+YFS      add_inode_tail starts
+YFS      add_inode_tail ends
+YFS      add_inode_cache finishYFS      getInode ends.
+YFS      size 1
+YFS      head inum 2
+YFS      tead inum 2
+YFS      getInode starts. the inum is 3
+YFS      inode of 3 is not in cache, read it from cached block.
+YFS      getBlock starts. the index is 1
+YFS      block of 1 is already in cache.
+YFS      update_Bnode_list start
+YFS      getBlock ends.
+YFS      add to cache, the nsize is 1
+YFS      add inode cache :ew a inode 3
+YFS      add_inode_tail starts
+YFS      add_inode_tail ends
+YFS      add_inode_cache finishYFS      getInode ends.
+YFS      head inum 3
+YFS      tead inum 3
+YFS      getInode starts. the inum is 4
+YFS      inode of 4 is not in cache, read it from cached block.
+YFS      getBlock starts. the index is 1
+YFS      block of 1 is already in cache.
+YFS      update_Bnode_list start
+YFS      getBlock ends.
+YFS      add to cache, the nsize is 2
+YFS      add inode cache :ew a inode 4
+YFS      add_inode_tail starts
+YFS      add_inode_tail ends
+YFS      add_inode_cache finishYFS      getInode ends.
+YFS      head inum 4
+YFS      tead inum 4
+YFS      size 3
+YFS      getInode starts. the inum is 2
+YFS      inode of 2 is already in cache.
+YFS      update_Nnode_list start
+YFS      it is already the tilaYFS      getInode ends.
+YFS      head inum 4
+YFS      tead inum 4
+YFS      size 3
+YFS      inum 4, dirtry 

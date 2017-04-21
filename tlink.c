@@ -18,10 +18,10 @@ main()
 	printf("mkdir /dir/dir3 status %d\n", status);
 
 	status = RmDir("/abc");
-	printf("rmdir /dir/dir3 status %d\n", status);
+	printf("rmdir /abd status %d\n", status);
 
-	status = RmDir("/dir/dir3");
-	printf("rmdir /dir/dir3 status %d\n", status);
+	// status = RmDir("/dir/dir3");
+	// printf("rmdir /dir/dir3 status %d\n", status);
 
 	status = ChDir("/dir");
 	printf("chdir /dir status %d\n", status);
@@ -48,14 +48,14 @@ main()
 	printf("open /b status %d\n", status);
 	Shutdown();
 
-	status = UnLink("/b");
+	status = Unlink("/b");
 	printf("unLink /b status %d\n", status);
 
 	status = Open("/b");
 	printf("open /b status %d\n", status);
 	Shutdown();
 
-	status = UnLink("/a");
+	status = Unlink("/a");
 	printf("Link status %d\n", status);
 
 	status = Open("/a");

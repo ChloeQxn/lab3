@@ -18,6 +18,7 @@ main()
 	printf("SymLink status %d\n", status);
 
 	status = ReadLink("/b", buffer, sizeof(buffer));
+	printf("%d\n", sizeof(buffer));
 	printf("ReadLink status %d\n", status);
 	printf("link = '%s'\n", buffer);
 

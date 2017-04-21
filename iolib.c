@@ -41,40 +41,44 @@ int is_open(int inum) {
 }
 
 int Open(char *pathname) {
+	fprintf(stderr, "lib: OPEN\n");
 	initial();
-
 	// create msg to send
 	my_msg msg;
 	msg.type = OPEN;
 	msg.data1 = cur_dir;
 	msg.data2 = (int)strlen(pathname);
 	msg.addr1 = pathname;
+	fprintf(stderr, "the cur_dir is %d \n", msg.data1);
+	//fprintf(stderr, "path name in msg library%s\n", (char*)msg.addr1);
+
 	// send the msg
 	if (Send(&msg, -1) == ERROR) {
 		// free(msg);
 		return ERROR;
 	}
+	int fd = 0;
 
 	// receive the return msg
 	if (msg.type == OPEN) {
-		if (msg.data1 == -1) return ERROR;
-		int fd = 0;
+		// fprintf(stderr, "message opened successfully\n");
+		
 		for (;fd < MAX_OPEN_FILES; fd ++) {
-			fprintf(stderr, "%d\n", fd);
+			//fprintf(stderr, "%d\n", fd);
 			if (opened[fd].open == 0) {
 				break;
 			}
 		}
 		if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
-		fprintf(stderr, "fd error \n" );
+		// fprintf(stderr, "fd error \n" );
 		return ERROR;
 		}
-		fprintf(stderr, "open success. the open data1%d\n", msg.data1);
 		opened[fd].open = 1;
 		opened[fd].cur_pos = 0;
 		opened[fd].inum = msg.data1;
+		fprintf(stderr, "lib open: inode number is %d\n", opened[fd].inum);
 	}
-	return 0;
+	return fd;
 }
 
 /*
@@ -82,6 +86,7 @@ int Open(char *pathname) {
 *
 */
 int Create(char *pathname) {
+	fprintf(stderr, "CREATE\n");
 	initial();
 	// create the create msg
 	my_msg msg;
@@ -90,17 +95,19 @@ int Create(char *pathname) {
     msg.data1 = (int) strlen(pathname);
     msg.data2 = cur_dir;
     fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+   // fprintf(stderr, "CREATE %d\n", msg.data2);
+    
+    
     
     // find fd for the created file
     int fd = 0;
 	for (;fd < MAX_OPEN_FILES; fd ++) {
-		fprintf(stderr, "%d\n", fd);
 		if (opened[fd].open == 0) {
 			break;
 		}
 	}
 	if(fd == MAX_OPEN_FILES || strlen(pathname) > MAXPATHNAMELEN) {
-		fprintf(stderr, "fd error \n" );
+		// fprintf(stderr, "fd error \n" );
 		return ERROR;
 	}
    
@@ -109,7 +116,7 @@ int Create(char *pathname) {
         perror("error sending create message");
         return ERROR;
     }
-    
+    fprintf(stderr, "CREATE REPLY\n");
     // receive the return msg
     if (msg.type == CREATE) {
     	if (msg.data1 == -1) return ERROR;
@@ -117,58 +124,107 @@ int Create(char *pathname) {
 		opened[fd].cur_pos = 0;
 		opened[fd].inum = msg.data1;
     }
-	return 0;
+    fprintf(stderr, "fd of %d is %d\n", fd, opened[fd].inum);
+	return fd;
 }
 /*
  * Return value of length is stored in msg->wtype field
  */
 int Read(int fd, void *buf, int size) {
-// 	if (fd < 0 || fd > MAX_OPEN_FILES || opened[fd]->open == 0) return ERROR;
-// 	my_msg* msg = (Msg*)malloc(sizeof(Msg*));
-// 	msg->type = READ;
-// //	msg->data1 = cur_dir;
-// 	msg->addr1 = buf;
-// 	msg->data2 = size;
-// 	msg->data3 = opened[fd]->inum;
-// 	msg->data1 = opened[fd]->cur_pos;
-// 	if (Send((void *)msg, -FILE_SEVER) == ERROR) {
-// 		free(msg);
-// 		return ERROR;
-// 	}
-// 	if(msg->type == ERROR) return ERROR;
-// 	free(msg);
-// 	int len = msg->type;
-// 	return len;
-	return 0;
-	/*
-	 * Still need some work to hand new position
-	 */
+	initial();
+	if (fd < 0 || fd > MAX_OPEN_FILES || opened[fd].open == 0) return ERROR;
+	if (opened[fd].inum == 0) {
+		perror("Please open the file before you read it\n"); 
+		return ERROR;
+	}
+	my_msg* msg = (my_msg*)malloc(sizeof(my_msg*));
+	msg->type = READ;
+//	msg->data1 = cur_dir;
+	msg->addr1 = buf;
+	msg->data2 = size;
+	msg->data3 = opened[fd].inum;
+	msg->data1 = opened[fd].cur_pos;
+	if (Send((void *)msg, -1) == ERROR) {
+		free(msg);
+		return ERROR;
+	}
+	if(msg->type == ERROR) return ERROR;
+	opened[fd].cur_pos += msg->data1;
+	int length = msg->data1;
+	free(msg);
+	return length;
 }
 /*
  * Write data to an opened file, begin
  */
 int Write(int fd, void *buf, int size) {
-	// if (fd < 0 || fd > MAX_OPEN_FILES || opened[fd]->open == 0) return ERROR;
-	// my_msg* msg = (Msg*)malloc(sizeof(Msg*));
-	// msg->type = WRITE;
-	// msg->addr1 = buf;
-	// msg->data2 = size;
-	// msg->data3 = opened[fd]->inum;
-	// msg->data1 = opened[fd]->cur_pos;
-	// if(Send((void *)msg, -FILE_SEVER) == ERROR) {
-	// 	free(msg);
-	// 	return ERROR;
-	// }
-	// if (msg->type == ERROR) return ERROR;
-	// free(msg);
-	// opened[fd]->cur_pos += msg->type; //advance new position
-	// int len = msg->type;
-	// return len;
-	return 0;
+	initial();
+	fprintf(stderr, "WRITE\n");
+	if (fd < 0 || fd > MAX_OPEN_FILES || opened[fd].open == 0) return ERROR;
+	if (opened[fd].inum == 0) {
+		perror("Please open this file before you write it\n");
+		return ERROR;
+	}
+	my_msg* msg = (my_msg*)malloc(sizeof(my_msg*));
+	msg->type = WRITE;
+	msg->addr1 = buf;
+	msg->data2 = size;
+	msg->data3 = opened[fd].inum;
+	msg->data1 = opened[fd].cur_pos;
+	if(Send((void *)msg, -1) == ERROR) {
+		free(msg);
+		return ERROR;
+	}
+	if (msg->type == ERROR) return ERROR;
+	opened[fd].cur_pos += msg->data1; //advance new position
+	int len = msg->data1;
+	if (opened[fd].size < opened[fd].cur_pos + 1) opened[fd].size = opened[fd].cur_pos;
+	free(msg);
+
+	return len;
 }
 int Seek(int fd, int offset, int whence) {
-
+	initial();
+	if (fd < 0 || fd > MAX_OPEN_FILES || opened[fd].open == 0) return ERROR;
+	if (opened[fd].inum == 0) {
+		perror("Please open this file before you write it\n");
+		return ERROR;
+	}
+	/*
+	 * The Seek file system operation does allow the file offset 
+	 * to be set beyond the end of the existing
+	 * size of the file; this is not an error.
+	 */
+	if (whence == SEEK_SET) {
+		if (offset < 0) {
+			perror("offset cannot go beyond the begin of the file\n");
+			return ERROR;
+		} else {
+			opened[fd].cur_pos = offset;
+			return opened[fd].cur_pos;
+		}
+	} else if (whence == SEEK_CUR) {
+		if (offset + opened[fd].cur_pos < 0) {
+			perror("offset cannot go beyond the begin of the file\n");
+			return ERROR;
+		} else {
+			opened[fd].cur_pos += offset;
+			return opened[fd].cur_pos;
+		}
+	} else if (whence == SEEK_END) {
+		if (offset + opened[fd].size < 0) {
+			perror("offset cannot go beyond the begin of the file\n");
+			return ERROR;
+		} else {
+			opened[fd].cur_pos = offset + opened[fd].size;
+			return opened[fd].cur_pos;
+		}
+	} else {
+		perror("Unknown whence type, check your input\n");
+		return ERROR;
+	}
 }
+
 int Link(char *oldname, char *newname) {
 	// create the msg
 	my_msg msg;
@@ -178,7 +234,7 @@ int Link(char *oldname, char *newname) {
     msg.addr2 = newname;
     msg.data2 = (int) strlen(newname);
     msg.data3 = cur_dir;
-    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    fprintf(stderr, "the cur_dir is %d \n", msg.data3);
     
     // send the msg
     if (Send(&msg,-1)==ERROR) {
@@ -214,6 +270,8 @@ int Unlink(char *pathname) {
 	return 0;
 }
 int SymLink(char *oldname, char *newname) {
+	// if the newname is null return error
+	if (newname == NULL) return ERROR;
 	// create the msg
 	my_msg msg;
     msg.type = SYMLINK;
@@ -222,7 +280,7 @@ int SymLink(char *oldname, char *newname) {
     msg.addr2 = newname;
     msg.data2 = (int) strlen(newname);
     msg.data3 = cur_dir;
-    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    fprintf(stderr, "the cur_dir is %d \n", msg.data3);
     
     // send the msg
     if (Send(&msg,-1)==ERROR) {
@@ -238,6 +296,7 @@ int SymLink(char *oldname, char *newname) {
 }
 
 int ReadLink(char *pathname, char *buf, int len) {
+	fprintf(stderr, "lib: readlink. the len is %d \n", len);
 	my_msg msg;
     msg.type = READLINK;
     msg.addr1 = pathname;
@@ -245,7 +304,7 @@ int ReadLink(char *pathname, char *buf, int len) {
     msg.addr2 = buf;
     msg.data2 = len;
     msg.data3 = cur_dir;
-    fprintf(stderr, "the cur_dir is %d \n", msg.data2);
+    fprintf(stderr, "the cur_dir is %d \n", msg.data3);
     
     // send the msg
     if (Send(&msg,-1)==ERROR) {
@@ -257,7 +316,7 @@ int ReadLink(char *pathname, char *buf, int len) {
     if (msg.type == READLINK) {
     	if (msg.data1 == -1) return ERROR;
     }
-	return 0;
+	return msg.data1;
 }
 
 int MkDir(char *pathname) {
@@ -297,7 +356,7 @@ int RmDir(char *pathname) {
     }
     
     // receive the return msg
-    if (msg.type == MKDIR) {
+    if (msg.type == RMDIR) {
     	if (msg.data1 == -1) return ERROR;
     }
 	return 0;
@@ -352,7 +411,6 @@ int Sync() {
 	// create the msg
 	my_msg msg;
     msg.type = SYNC;
-  	msg.data1 = -1;
     fprintf(stderr, "the cur_dir is %d \n", msg.data2);
     
     // send the msg
@@ -363,9 +421,8 @@ int Sync() {
     
     // receive the return msg
     if (msg.type == SYNC) {
-    	if (msg.data1 == -1) return ERROR;
+    	return 0;
     }
-	return 0;
 }
 
 int Shutdown() {

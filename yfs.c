@@ -102,7 +102,6 @@ void add_inode(int ikey, struct Nnode* node) {
       s->ikey = ikey; 
       s->node = node; 
       HASH_ADD_INT(inodeHash, ikey, s );  /* 这里必须明确告诉插入函数，自己定义的hash结构体中键变量的名字 */  
-      Nsize++;
     }  
     // strcpy(s-> value, value_buf);  
 } 
@@ -116,7 +115,6 @@ void add_block(int ikey, struct Bnode* node) {
       s->ikey = ikey; 
       s->node = node; 
       HASH_ADD_INT(blockHash, ikey, s );  /* 这里必须明确告诉插入函数，自己定义的hash结构体中键变量的名字 */  
-      Bsize++;
     }  
     // strcpy(s-> value, value_buf);  
 } 
@@ -168,7 +166,7 @@ struct Bnode *new_Bnode(void *buf, int index) {
 }
 // add inode to the tail of linked list
 void add_inode_tail(struct Nnode *nnode) {
-	// TracePrintf(0, "add_inode_tail starts\n");
+	TracePrintf(0, "add_inode_tail starts\n");
 	if (Ntail == NULL) {
 		Ntail = nnode;
 		Nhead = nnode;
@@ -178,7 +176,7 @@ void add_inode_tail(struct Nnode *nnode) {
 		Ntail = nnode;
 	}
 	Nsize++;
-	// TracePrintf(0, "add_inode_tail ends\n");
+	TracePrintf(0, "add_inode_tail ends\n");
 }
 
 // add block node to the tail of linked list
@@ -216,6 +214,7 @@ void add_inode_cache(int inum, struct inode* node){
 	}
 	// create a Nnode
 	struct Nnode* nnode = new_Nnode(node, inum);
+	TracePrintf(0,"add inode cache :ew a inode %d\n", nnode->inum);
 	// add it to hash
 	add_inode(inum, nnode);
 	// add it to list
@@ -239,7 +238,7 @@ void add_block_cache(int index, void *buf){
 		Bhead = Bhead->next;
 		free(Bhead->pre);
 		Bhead->pre = NULL;
-		Nsize--;
+		Bsize--;
 	}
 	// create a Nnode
 	struct Bnode* nnode = new_Bnode(buf, index);
@@ -311,50 +310,41 @@ void write_Bnode(int index){
 * write inode into its block(which in block cache) when this inode leave cache
 */
 void write_inode_block(int inum) {
+	TracePrintf(0, "write_inode_block start...\n");
 	// if inode is not dirty, return
 	struct Nnode *nnode = find_inode(inum)->node;
-	if (nnode->dirty == '0') return;
+	if (nnode->dirty == '0') {
+		TracePrintf(0,"write_inode_block: %d inode is not dirty.\n", inum);
+		return;
+	}
 	// find the block in the cache and write into it
 	int index = 1 + inum / (SECTORSIZE/INODESIZE);
 	int offset = inum % (SECTORSIZE/INODESIZE);
-	struct Bnode *bnode = find_block(index)->node;
+	// find_block(index);
+	struct my_struct2 *tmp = find_block(index);
+	TracePrintf(0, "index %d\n", index);
+	// struct Bnode *bnode = find_block(index)->node;
+	if (tmp == NULL) TracePrintf(0, "write_inode_block startnull...\n");
+	struct Bnode *bnode = tmp->node;
+	TracePrintf(0, "write_inode_block start...\n");
 	memcpy(((struct inode*)(bnode->buf))+offset, find_inode(inum)->node, sizeof(struct inode));
-	nnode->dirty = '1';
+	bnode->dirty = '1';
+	TracePrintf(0, "write_inode_block ends. block index is %d\n", index);
 }
 
 /*
 * write block into its disk when this block leave cache
 */
 void write_block_disk(int i) {
+	TracePrintf(0, "write_block_disk start...\n");
 	struct Bnode *bnode = find_block(i)->node;
 	if (bnode->dirty == '1') {
 		WriteSector(i, bnode->buf);
 	}
+	TracePrintf(0, "write_block_disk ends\n");
 }
 
-// get inode with given inum, if it is in cache, 
-struct inode *getInode(int inum) {
-	TracePrintf(0, "getInode starts. the inum is %d\n", inum);
-	struct my_struct *tmp = find_inode(inum);
-	struct inode *node;
-	
-	// if the inode is not in the cache, read it from the disk
-	if (tmp == NULL) {
-		TracePrintf(0, "inode of %d is not in cache, read it from disk.\n", inum);
-		node = get_inode_disk(inum);
-		// TracePrintf(0, "try to put it into cache");
-		// put it into cache
-		add_inode_cache(inum, node);
-	} else {
-		// it already in cache, get it from hash, and update its location in the list
-		TracePrintf(0, "inode of %d is already in cache.\n", inum);
-		node = tmp->node->node;
-		// TracePrintf(0, "getInode: get the node in the hash");
-		update_Nnode_list(tmp->node);
-	}
-	TracePrintf(0, "getInode ends.\n");
-	return node;
-}
+
 
 // get inode with given inum, if it is in cache, 
 void *getBlock(int index) {
@@ -380,6 +370,41 @@ void *getBlock(int index) {
 	return buf;
 }
 
+struct inode *get_inode_block(int i) {
+	// TracePrintf(0, "get inode from disk");
+	int blockIndex = 1 + (i) / (BLOCKSIZE/INODESIZE);
+	void *buf = getBlock(blockIndex);
+	struct inode* node = (struct inode*)malloc(sizeof(struct inode));
+	int offset = i % (BLOCKSIZE/INODESIZE);
+	memcpy(node, (struct inode*)buf + offset, sizeof(struct inode));
+	free(buf);
+	// TracePrintf(0, "get inode from disk ends");
+	return node;
+}
+
+// get inode with given inum, if it is in cache, 
+struct inode *getInode(int inum) {
+	TracePrintf(0, "getInode starts. the inum is %d\n", inum);
+	struct my_struct *tmp = find_inode(inum);
+	struct inode *node;
+	
+	// if the inode is not in the cache, read it from the disk
+	if (tmp == NULL) {
+		TracePrintf(0, "inode of %d is not in cache, read it from cached block.\n", inum);
+		node = get_inode_block(inum);
+		// TracePrintf(0, "try to put it into cache");
+		// put it into cache
+		add_inode_cache(inum, node);
+	} else {
+		// it already in cache, get it from hash, and update its location in the list
+		TracePrintf(0, "inode of %d is already in cache.\n", inum);
+		node = tmp->node->node;
+		// TracePrintf(0, "getInode: get the node in the hash");
+		update_Nnode_list(tmp->node);
+	}
+	TracePrintf(0, "getInode ends.\n");
+	return node;
+}
 ///////////////////////////////////////////////////////////////////////////
 
 
@@ -616,6 +641,25 @@ int path_file_helper(char *pathname,int len_name, int curr_index, int curr_inum,
 	if (curr_inum == -1) {
 		return -1;
 	}
+
+	// deal with symlink name
+	if (getInode(curr_inum)->type == INODE_SYMLINK) {
+		// check the num of slink
+		num_slink++;
+		if (num_slink > MAXSYMLINKS)
+			return -1;
+
+		// update the pathname
+		struct inode *node = getInode(curr_inum);
+		int size = node->size;
+		char symname[size + len_name+1];
+		memset(symname, '\0', size + len_name+1);
+		memcpy(symname, getBlock(node->direct[0]), size);
+		TracePrintf(0, "path_file_helper: print the as is name of symlink %s\n", symname);
+		memcpy(symname+size, pathname+curr_index, len_name-curr_index);
+		TracePrintf(0, "path_file_helper: print the pathname after update\n");
+		return path_file_helper(pathname, strlen(pathname), 0, curr_inum, num_slink);
+	}
 	return path_file_helper(pathname, len_name, curr_index, curr_inum, num_slink);
 }
 
@@ -638,11 +682,15 @@ struct my_comp *get_parent(char *pathname, int curr_inum) {
 	memcpy(name, pathname+len+1, (strlen(pathname))-len-1);
 	TracePrintf(0,"get_parent: the parentname is %s\n", parentname);
 	TracePrintf(0, "get_parent: the component name is %s\n", name);
-	// get the parent inum
-	int par_inum = path_file(parentname, curr_inum);
 
 	// store the par_inum and copomnet name into the return type.
 	struct my_comp *tmp = (struct my_comp*)malloc(sizeof(struct my_comp));
+
+
+	// get the parent inum
+	int par_inum = path_file(parentname, curr_inum);
+
+	
 	// if parent inum do not exist or parent is not a dir, return error
 	if (par_inum <= 0 || getInode(par_inum)->type != INODE_DIRECTORY) {
 		TracePrintf(0,"get_parent: the paretn is not a dir.\n");
@@ -751,7 +799,7 @@ struct dir_entry *search_entry(char *filename, int dir_inum) {
 
 	// return ERROR if this is not a directory
 	if (dir_inode->type != INODE_DIRECTORY) {
-		return ERROR;
+		return NULL;
 	}
 
 	// the entry number in this dir file
@@ -768,7 +816,7 @@ struct dir_entry *search_entry(char *filename, int dir_inum) {
 		int j;
 		for (j = 0; j < SECTORSIZE/sizeof(struct dir_entry); j++) {
 			entry_count++;
-			if (entry_count > entry_num) return ERROR;
+			if (entry_count > entry_num) return NULL;
 			TracePrintf(0, "the name in the dir%s\n",block_buf[j].name);
 			TracePrintf(0, "the inum for this entry is %d\n",block_buf[j].inum);
 			if (strcmp(block_buf[j].name, filename) == 0) {
@@ -899,10 +947,7 @@ void open_handler(my_msg *msg, int sender_pid) {
     	msg->data1 = -1;
     }
     TracePrintf(0, "open_handleer: the pathname is %s\n", pathname);
-    int dir_inum;
-    if (CopyFrom(sender_pid, &dir_inum, &(msg->data1), sizeof(int)) == ERROR) {
-    	msg->data1= -1;
-    }
+    int dir_inum = msg->data1;
     TracePrintf(0, "open_handler: the dir_inum after CopyFrom:%d\n", dir_inum);
    
     // find the inum for the open file
@@ -919,11 +964,6 @@ void open_handler(my_msg *msg, int sender_pid) {
     }
 }
 
-// close the file with given fd
-int close_handler(int fd) {
-
-}
-
 /* 
  * create and open the new file, the file type is regular
  * return the new file's inum
@@ -938,10 +978,12 @@ void create_handler(my_msg *msg, int sender_pid){
 	}
 	TracePrintf(0,"create_handler: the pahname is %s\n", pathname);
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
-		return ERROR;
-	}
+	int curr_inum = msg->data2;
+
+	// TracePrintf(0,"print cur addr is %d", &curr_inum);
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+	// 	return ERROR;
+	// }
 	TracePrintf(0,"create_handler: the curr_inum is %d\n", curr_inum);
 	
 	// get_parent(pathname, curr_inum);
@@ -949,25 +991,31 @@ void create_handler(my_msg *msg, int sender_pid){
 	buff = get_parent(pathname, curr_inum);
 	TracePrintf(0, "create_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
 
-	if (getInode(buff->par_inum)->type != INODE_DIRECTORY) {
+	if (buff->par_inum == ERROR || getInode(buff->par_inum)->type != INODE_DIRECTORY) {
 		TracePrintf(0, "create_handler: the parent is not a dir. reply a msg with data -1. create ends.\n");
 		msg->data1 = -1;
 		return;
 	}
-	// print_entry(2);
+	
 	// parent is valid, add entry in it
 	int inum = entry_query(buff->name, buff->par_inum);
+
 	if (inum != ERROR) {
+		if (getInode(inum)->type != INODE_REGULAR) {
+			return msg->data1 = -1;
+		}
 		TracePrintf(0, "create_handler: the file exists, set it as new\n");
 		struct inode *node = getInode(inum);
 		node->size = 0;
 		// set the return msg data1 as the inum for the filename
-		msg->data1 = inum;
-	} else {
+		return msg->data1 = inum;
+	}
+	else {
 		TracePrintf(0, "create_handler: the file do not exists, add entry.\n");
 		int new_inum = get_freeInode();
 		int inum = add_entry(buff->name, buff->par_inum, new_inum);
 		if (inum == ERROR) return ERROR;
+		write_Nnode(new_inum);
 		struct inode *node = getInode(inum);
 		node->type = INODE_REGULAR;
 		node->nlink = 1;
@@ -977,16 +1025,6 @@ void create_handler(my_msg *msg, int sender_pid){
 		TracePrintf(0, "create_handler ends. the new inum is %d\n", inum);
 	}
 	return;
-}
-
-// This request reads data from an open file, beginning at the current position in the file as represented 
-// by the given file descriptor fd
-int read_handler(int fd, void *buf, int size) {
-
-}
-
-int write_handler(int fd, void *buf, int size) {
-
 }
 
 /* create a head link from new file name to the existing oldname
@@ -1003,10 +1041,10 @@ int link_handler(my_msg *msg, int sender_pid) {
 	CopyFrom(sender_pid, newname, msg->addr2, msg->data2+1);
 	TracePrintf(0,"link_handler: the oldname is %s, the newname is %s\n", oldname,newname);
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int))==ERROR) {
-		return ERROR;
-	}
+	int curr_inum = msg->data3;
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int))==ERROR) {
+	// 	return ERROR;
+	// }
 	TracePrintf(0,"link_handler: the curr_inum is %d\n", curr_inum);
 
 	// return -1 if newname already exist
@@ -1037,14 +1075,13 @@ void unlink_handler(my_msg *msg, int sender_pid) {
 	// print_entry(1);
 	// read the path name and curr_dir from msg
 	char pathname[MAXPATHNAMELEN];
-	int curr_inum;
+	int curr_inum = msg->data2;
 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) {
 		return msg->data1 = -1;
 	}
-	TracePrintf(0, "unlink_handler:the pathname is %s, the curr_inum is \n", pathname);
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int)) == ERROR) {
-		return msg->data1 = -1;
-	}
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int)) == ERROR) {
+	// 	return msg->data1 = -1;
+	// }
 	TracePrintf(0, "unlink_handler:the pathname is %s, the curr_inum is %d\n", pathname, curr_inum);
 
 	// find the parent inum and component name
@@ -1082,19 +1119,15 @@ void symlink_handler(my_msg *msg, int sender_pid) {
 	CopyFrom(sender_pid, newname, msg->addr2, msg->data2+1);
 	TracePrintf(0,"symlink_handler: the oldname is %s, the newname is %s\n", oldname,newname);
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int))==ERROR) {
-		return ERROR;
-	}
+	int curr_inum = msg->data3;
+	// TracePrintf(0, "symlink_handler: data3 %d\n", msg->data3);
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int))==ERROR) {
+	// 	return ERROR;
+	// }
 	TracePrintf(0,"symlink_handler: the curr_inum is %d\n", curr_inum);
 
 	// return -1 if newname already exist
 	if (path_file(newname, curr_inum) > 0) return msg->data1 = -1;
-
-	
-	// find the inum for oldname, return -1 if it is a dir
-	int inum = path_file(oldname, curr_inum);
-	if (inum <= 0 || getInode(inum)->type == INODE_DIRECTORY) return msg->data1 = -1;
 
 	// find the parent dir for newname, return -1 if parent dir not valid
 	struct my_comp *comp = get_parent(newname, curr_inum);
@@ -1104,58 +1137,69 @@ void symlink_handler(my_msg *msg, int sender_pid) {
 	// add an entry in par dir, the inum is oldname inum
 	int new_inum = get_freeInode();
 	if (new_inum == ERROR) return msg->data1=-1;
-	inum = add_entry(comp->name, comp->par_inum, new_inum);
+	int inum = add_entry(comp->name, comp->par_inum, new_inum);
 	if (inum == -1) return msg->data1 = -1;
+	write_Nnode(new_inum);
 	struct inode *node = getInode(inum);
 	node->type=INODE_SYMLINK;
-	node->nlink = 0;
+	node->nlink = 1;
 	node->reuse++;
 	int size = strlen(oldname);
-	node->size;
-	// count for the blocks for the oldname
-	int i = 0;
-	while(size > 0 && i < NUM_DIRECT) {
-		int blockIndex = get_freeBlock();
-		node->direct[i] = blockIndex;
-		memcpy(getBlock(blockIndex), oldname, SECTORSIZE);
-		size-=SECTORSIZE;
-	}
-	TracePrintf(0,"symlink_handler ends. %d\n", inum);
+	node->size = size;
+	// alloc a block to mem the oldname
+	int blockIndex = get_freeBlock();
+	write_Bnode(blockIndex);
+	node->direct[0] = blockIndex;
+	memcpy(getBlock(blockIndex), oldname, strlen(oldname));
+	TracePrintf(0,"symlink_handler ends. is as name is %s, new inum for this name is %d\n",getBlock(blockIndex), new_inum);
+	TracePrintf(0, " the updated size %d\n", getInode(3)->size);
 	return msg->data1 = inum;
 }
 
 void readlink_handler(my_msg *msg, int sender_pid){
-	TracePrintf(0, "readlink_handler starts.");
+	TracePrintf(0, "readlink_handler starts.\n");
 	
 	// read the newname and old name form msg
 	char pathname[MAXPATHNAMELEN];
 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) return msg->data1 = -1;;
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int))==ERROR) {
-		return msg->data1=-1;
+	int curr_inum = msg->data3;
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data3), sizeof(int))==ERROR) {
+	// 	return msg->data1=-1;
+	// }
+	int len = msg->data2;
+	// if (CopyFrom(sender_pid, &len, &(msg->data2), sizeof(int))==ERROR) {
+	// 	return msg->data1=-1;
+	// }
+	TracePrintf(0,"readlink_handler: the pathname is %s, dir_inum is %d, len is %d\n", pathname, curr_inum, len);
+
+	// find the parent of pathname
+	struct my_comp *buff;
+	buff = get_parent(pathname, curr_inum);
+	TracePrintf(0, "readlink_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
+	// check if the parent pathname is valid and is a directory
+	if (buff->par_inum == ERROR || getInode(buff->par_inum)->type != INODE_DIRECTORY) {
+		return msg->data1 = -1;
 	}
-	int len;
-	if (CopyFrom(sender_pid, &len, &(msg->data2), sizeof(int))==ERROR) {
-		return msg->data1=-1;
-	}
-	TracePrintf(0,"readlink_handler: the pathname is %s, dir_inum is \n, len is %d", pathname, curr_inum, len);
 
 	// find the inum for pathname
-	int inum = path_file(pathname, curr_inum);
-	if (inum <= 0 || getInode(inum)->type != INODE_SYMLINK) return msg->data1 = -1;
+	int inum = entry_query(buff->name, buff->par_inum);
+	if (inum <= 0) return msg->data1 = -1;
 
 	// read the content to the buf
 	struct inode *node = getInode(inum);
+	if (node->type != INODE_SYMLINK) return msg->data1 = -1;
 	void *buf = getBlock(node->direct[0]);
 	if (node->size <= len) {
+		TracePrintf(0, "readlink_handler: the size is %d,copy the content in symlink block %s\n", node->size, buf);
 		msg->data1 = node->size;
 		CopyTo(sender_pid,msg->addr2,buf,node->size);
 	} else {
-		msg->data2 = len;
+		TracePrintf(0, "222222222211111111111\n");
+		msg->data1 = len;
 		CopyTo(sender_pid,msg->addr2,buf,len);
 	}
-
+	TracePrintf(0, "readlink_handler ends.\n");
 }
 /*
 * Make a dir. There are two default dir_entry, . and ..
@@ -1171,10 +1215,10 @@ void mkdir_handler(my_msg *msg, int sender_pid) {
 	}
 	TracePrintf(0,"mkdir_handler: the pathname is %s\n", pathname);
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
-		return ERROR;
-	}
+	int curr_inum = msg->data2;
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+	// 	return ERROR;
+	// }
 	TracePrintf(0,"mkdir_handler: the curr_inum is %d\n", curr_inum);
 	
 	// get_parent(pathname, curr_inum);
@@ -1202,12 +1246,14 @@ void mkdir_handler(my_msg *msg, int sender_pid) {
 		if (inum == ERROR) {
 			return msg->data1 = -1;
 		}
+		write_Nnode(new_inum);
 		struct inode *node = getInode(inum);
 		node->type = INODE_DIRECTORY;
 		node->size = 2 * sizeof(struct dir_entry);
 		node->nlink = 1;
 		node->reuse++;
 		int new_block = get_freeBlock();
+		write_Bnode(new_block);
 		node->direct[0] = new_block;
 		struct dir_entry *tmp = getBlock(new_block);
 		int i = 0;
@@ -1245,10 +1291,10 @@ int rmdir_handler(my_msg *msg, int sender_pid) {
 	}
 
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
-		return msg->data1 = -1;
-	}
+	int curr_inum = msg->data2;
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+	// 	return msg->data1 = -1;
+	// }
 	TracePrintf(0,"rmdir_handler: the curr_inum is %d\n", curr_inum);
 	
 
@@ -1264,7 +1310,11 @@ int rmdir_handler(my_msg *msg, int sender_pid) {
 
 	// find the entry address for the component
 	struct dir_entry *entry = search_entry(buff->name, buff->par_inum);
-	if (entry == NULL || entry->inum < 0) return msg->data1 = -1;
+	TracePrintf(0, "search_entry ends.\n");
+	if (entry == NULL || entry->inum < 0) {
+		TracePrintf(0,"rmdir path not found\n");
+		return msg->data1 = -1;
+	}
 
 	// get the inode for this filename
 	struct inode *node = getInode(entry->inum);
@@ -1294,10 +1344,10 @@ int chdir_handler(my_msg *msg, int sender_pid) {
 	}
 
 	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
-		return msg->data1 = -1;
-	}
+	int curr_inum = msg->data2;
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+	// 	return msg->data1 = -1;
+	// }
 	TracePrintf(0,"rmdir_handler: the curr_inum is %d\n", curr_inum);
 	
 	// get the inum for pathname
@@ -1311,22 +1361,32 @@ int chdir_handler(my_msg *msg, int sender_pid) {
 }
 
 void stat_handler(my_msg *msg, int sender_pid) {
-	TracePrintf(0, "chdir_handler start...\n");
+	TracePrintf(0, "stat_handler start...\n");
 
+	// get the pathname and curr_inum
 	char pathname[MAXPATHNAMELEN];
 	if (CopyFrom(sender_pid, pathname, msg->addr1, msg->data1+1) == ERROR) {
 		return msg->data1 = -1;
 	}
-
-	// get the cur inum
-	int curr_inum;
-	if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
-		return msg->data1 = -1;
-	}
-	TracePrintf(0,"rmdir_handler: the curr_inum is %d\n", curr_inum);
+	int curr_inum = msg->data2;
+	// if (CopyFrom(sender_pid, &curr_inum, &(msg->data2), sizeof(int))==ERROR) {
+	// 	return msg->data1 = -1;
+	// }
+	TracePrintf(0,"stat_handler: the pathname is %s, the curr_inum is %d\n", pathname, curr_inum);
 	
-	// get the inum for pathname
-	int inum = path_file(pathname, curr_inum);
+	// get the parent
+	struct my_comp *buff = get_parent(pathname, curr_inum);
+	TracePrintf(0, "stat_handler: the par_inum is %d, the component name is %s\n", buff->par_inum, buff->name);
+
+	// check if the parent pathname is valid and is a directory
+	if (buff->par_inum == -1 || getInode(buff->par_inum)->type!= INODE_DIRECTORY) {
+		TracePrintf(0, "stat_handler error, pathname is not valid.");
+		msg->data1 = -1;
+		return;
+	}
+	
+	// query the name in parent
+	int inum = entry_query(buff->name, buff->par_inum);
 	if (inum == ERROR) return msg->data1 = -1;
 
 	// create return msg
@@ -1338,24 +1398,470 @@ void stat_handler(my_msg *msg, int sender_pid) {
 	s.nlink = node->nlink;
 	CopyTo(sender_pid, msg->addr2, &s, sizeof(struct Stat));
 }
+
+void read_handler(my_msg* msg, int pid) {
+	TracePrintf(0, "****************************\n");
+	TracePrintf(0, "READ: entering read handler\n");
+	/*
+	 * Get current position from message
+	 * Should be modified later
+	 */
+	 int start_pos = msg->data1;
+	 int len = msg->data2;
+	 int inode_num = msg->data3;
+	 // void *buf = msg->addr1;
+	TracePrintf(0, "READ: Inode number is %d\n", inode_num);
+ 	 struct inode *inode = getInode(inode_num);
+	 TracePrintf(0, "READ: size to read is %d, start position is %d, inode size is %d\n", len, start_pos, inode->size);
+	 
+	 if (start_pos > inode->size) {
+	 	TracePrintf(0, "READ: read position larger than size of the file\n");
+	 	return;
+	 }
+
+	 if (start_pos + len > inode->size) {
+	 	len = inode->size - start_pos;
+	 	TracePrintf(0, "READ: size to read is %d, start position is %d\n", len, start_pos);
+	 	if(len < 0) return;
+	 }
+	 int end_pos = start_pos + len;
+	 char *tempBuffer = (char*)malloc(sizeof(char)*len);
+	 int startOffset = start_pos % BLOCKSIZE;
+	 int size = len;
+	 int i = 0;
+	 int cur = 0;
+	 for(; i < NUM_DIRECT; i ++) {
+	 	block_num = inode->direct[i];
+	 	if (block_num <= 0) break;
+	 	if ((cur + BLOCKSIZE)>=start_pos && cur <= start_pos)break;
+	 	cur += BLOCKSIZE;
+	 }
+
+	 /*
+	  * Copy from the indirect field
+	  */
+	  if (i < NUM_DIRECT) {
+	  	TracePrintf(0, "READ: i is %d\n", i);
+	  	char *tmp = tempBuffer;
+        while (start_pos <end_pos && i<NUM_DIRECT) {
+            block_num = inode->direct[i];
+            if (block_num>0) {
+                int read_in_block;
+                if (end_pos<cur+BLOCKSIZE) read_in_block = end_pos - start_pos;
+                else read_in_block = cur+BLOCKSIZE-start_pos;
+                void *bc = getBlock(block_num);
+                memcpy(tmp,bc+start_pos-cur,read_in_block);
+
+                start_pos += read_in_block;
+                tmp += read_in_block;
+                cur += BLOCKSIZE;
+            }
+            i++;
+        }
+        if (i>=NUM_DIRECT) {
+            if (inode->indirect!=0) {
+                block_num = inode->indirect;
+                void *block = getBlock(block_num);
+                int j = 0;
+                while (start_pos<size && j<BLOCKSIZE) {
+                    block_num = *(int*)(block+j);
+                    if (block_num>0) {
+                        int read_in_block;
+                        if (size<cur+BLOCKSIZE) read_in_block = end_pos - start_pos;
+                        else read_in_block = cur+BLOCKSIZE-start_pos;
+                        void *bc = getBlock(block_num);
+                        memcpy(tmp,bc + start_pos-cur,read_in_block);
+                        start_pos += read_in_block;
+                        tmp += read_in_block;
+                        cur += BLOCKSIZE;
+                    }
+                    j+=4;
+                }
+            }
+        }
+
+	  } else {
+	  	if (inode->indirect != 0) {
+	  		block_num = inode->indirect;
+	  		void *buf = getBlock(block_num);
+	  		for (i = 0; i < BLOCKSIZE; i +=4) {
+	  			block_num = *(int *)(buf + i);
+	  			if (block_num != 0) {
+	  				if ((cur - start_pos) < size && (cur - start_pos + BLOCKSIZE) > size) break;
+	  				cur += BLOCKSIZE;
+	  			}
+	  		}
+
+	  		char *tmp = tempBuffer;
+	  		int j = 0;
+	  		while (start_pos<size && j<BLOCKSIZE) {
+                    block_num = *(int*)(buf+j);
+                    if (block_num>0) {
+                        int read_in_block;
+                        if (size<cur+BLOCKSIZE) read_in_block = end_pos - start_pos;
+                        else read_in_block = cur+BLOCKSIZE-start_pos;
+                        void *bc = getBlock(block_num);
+                        memcpy(tmp,bc + start_pos-cur,read_in_block);
+                        start_pos += read_in_block;
+                        tmp += read_in_block;
+                        cur += BLOCKSIZE;
+                    }
+                    j+=4;
+                }
+	  	}
+	  }
+
+	  if (CopyTo(pid, msg->addr1, tempBuffer, size)) {
+	  	 msg->type = ERROR;
+	  	 free(tempBuffer);
+	  	 return;
+	  }
+	free(tempBuffer);
+	msg->data1 = len;
+	TracePrintf(0, "READ: read data length is %d \n", msg->data1);
+}
+
+void write_handler(my_msg* msg, int pid) {
+	TracePrintf(0, "*************************************\n");
+	TracePrintf(0, "Write Handler\n");
+	/*
+	 *my_msg* msg = (Msg*)malloc(sizeof(Msg*));
+	msg->type = WRITE;
+	msg->addr1 = buf;
+	msg->data2 = size;
+	msg->data3 = opened[fd]->inum;
+	msg->data1 = opened[fd]->cur_pos;
+	 */
+	
+	int start_pos = msg->data1;
+	int size = msg->data2;
+	int inode_num = msg->data3;
+
+	char *tempBuffer = (char *)malloc(sizeof(char)*size);
+	TracePrintf(0, "WRITE: Inode number is %d\n", inode_num);
+	struct inode* inode = getInode(inode_num);
+	CopyFrom(pid, tempBuffer, msg->addr1, size);
+	TracePrintf(0, "WRITE: Finished CopyFrom\n");
+	if (inode->type == INODE_DIRECTORY) {
+		msg->type = ERROR;
+		return;
+	}
+	int newBlock = 0;
+	/*
+	 * Deal with the "\0" problem
+	 */
+	if (start_pos > inode->size) {
+		TracePrintf(0,"Handle seek problem in write, block size is %d\n", inode->size);
+		int startBlock = (start_pos - 1) / BLOCKSIZE + 1;
+		int startOffset = (start_pos) % BLOCKSIZE;
+		int curBlock = (inode->size - 1)/BLOCKSIZE + 1;
+		int curOffset = inode->size % BLOCKSIZE;
+		int i = curBlock;
+		/*
+		 *
+		 */
+		if (startBlock <= NUM_DIRECT) {
+			while (i < startBlock) {
+				 if (inode->direct[i] != 0 ) { //fill the half block curent offset
+					void *block_num = getBlock(inode->direct[i]);
+
+					char *tmp = (char *)malloc(BLOCKSIZE - curOffset);
+					int n;
+					for (n = 0; n < BLOCKSIZE - curOffset; n ++) {
+						tmp[n] = '\0';
+					}
+					memcpy(block_num + curOffset, tmp, BLOCKSIZE - curOffset);
+					inode->size += (BLOCKSIZE - curOffset);
+					curOffset = 0;
+				} else { //fill full block
+					inode->direct[i] = get_freeBlock();
+					void *block_num = getBlock(inode->direct[i]);
+					char *tmp = (char *)malloc(BLOCKSIZE);
+					int n;
+					for (n = 0; n < BLOCKSIZE; n ++) {
+						tmp[n] = '\0';
+					}
+					memcpy(block_num, tmp, BLOCKSIZE);
+					inode->size += BLOCKSIZE;
+				}
+				i ++;
+			}
+			if (i == startBlock && startOffset != 0) {
+				inode->direct[i] = get_freeBlock();
+				void *block = getBlock(inode->direct[i]);
+				int n;
+				char *tmp = (char *)malloc(startOffset - inode->size);
+				for (n = 0; n < startOffset; n ++) {
+					tmp[n] = '\0';
+				}
+				memcpy(block, tmp, startOffset - inode->size);
+				inode->size = startOffset;
+				startOffset = 0;
+			}			
+		} else {
+			if (curBlock < NUM_DIRECT) { //cover the direct and indirect field
+				while (curBlock < NUM_DIRECT) {
+					if (inode->direct[curBlock] != 0 ) { //fill the half block curent offset
+						void *block_num = getBlock(inode->direct[curBlock]);
+						char *tmp = (char *)malloc(BLOCKSIZE - curOffset);
+						int n;
+						for (n = 0; n < BLOCKSIZE - curOffset; n ++) {
+							tmp[n] = '\0';
+						}
+						memcpy(block_num + curOffset, tmp, BLOCKSIZE - curOffset);
+						inode->size += (BLOCKSIZE - curOffset);
+						curOffset = 0;
+					} else { //fill full block
+						inode->direct[i] = get_freeBlock();
+						void *block_num = getBlock(inode->direct[curBlock]);
+						char *tmp = (char *)malloc(BLOCKSIZE);
+						int n;
+						for (n = 0; n < BLOCKSIZE; n ++) {
+							tmp[n] = '\0';
+						}
+						memcpy(block_num, tmp, BLOCKSIZE);
+						inode->size += BLOCKSIZE;
+					}
+					curBlock ++;
+				}
+			} else { //only write in the indirect field
+				void *indirectBlock = getBlock(inode->indirect);
+				int curIndex = curBlock - NUM_DIRECT;
+				int block_num = *(int *)(indirectBlock + curIndex);
+				while (curBlock < startBlock) {
+					if (curOffset != 0) {
+						void *block_num = getBlock(block_num);
+						char *tmp = (char *)malloc(BLOCKSIZE - curOffset);
+						int n;
+						for (n = 0; n < BLOCKSIZE - curOffset; n ++) {
+							tmp[n] = '\0';
+						}
+						memcpy(block_num + curOffset, tmp, BLOCKSIZE - curOffset);
+						inode->size += (BLOCKSIZE - curOffset);
+						curOffset = 0;
+						curBlock ++;
+						curIndex ++;
+					} else {
+						*(int *)(indirectBlock + curIndex) = get_freeBlock();
+						void *newBlock = getBlock(*(int *)(indirectBlock + curIndex));
+						char *tmp = (char *)malloc(BLOCKSIZE);
+						int n;
+						for (n = 0; n < BLOCKSIZE; n ++) {
+							tmp[n] = '\0';
+						}
+						memcpy(newBlock, tmp, BLOCKSIZE);
+						curBlock ++;
+						curIndex ++;
+						inode->size += BLOCKSIZE;
+					}
+				}
+				if (curBlock == startBlock && startOffset != 0) {
+					*(int *)(indirectBlock + curIndex) = get_freeBlock();
+					void *newBlock = getBlock(*(int *)(indirectBlock + curIndex));
+					int n;
+					char *tmp = (char *)malloc(startOffset - inode->size);
+					for (n = 0; n < startOffset - inode->size; n ++) {
+						tmp[n] = '\0';
+					}
+					memcpy(newBlock, tmp, startOffset - inode->size);
+					inode->size = startOffset;
+					startOffset = 0;
+				}
+			}
+		}
+	}
+
+	write_Nnode(inode_num);
+	if (start_pos + size > inode->size) {
+		newBlock = (start_pos+size-inode->size - 1) / BLOCKSIZE + 1;
+		TracePrintf(0, "WRITE: new block number is %d \n", newBlock);
+	}
+	/*
+	 * Allocate new block to this file
+	 */
+	int i = 0;
+	for(; i < NUM_DIRECT; i ++) {
+		if (newBlock <= 0) break;
+		if (inode->direct[i] <= 0) {			
+			inode->direct[i] = get_freeBlock();
+			write_Nnode(inode_num); //to be modified
+			newBlock--;
+		}
+	}
+	TracePrintf(0, "WRITE: allocating new blocks\n");
+	int data;
+	if (newBlock > 0) {
+		if (inode->indirect <= 0) {
+			inode->indirect = get_freeBlock();
+			write_Nnode(inode_num);
+		}
+		void *indirectBlock = getBlock(inode->indirect);
+		int j = 0;
+		for (; j < BLOCKSIZE; j += 4) {
+			if (newBlock <= 0 ) break;
+			data = *(int *)(indirectBlock + j);
+			if (data <= 0) {
+				data = get_freeBlock();
+				write_Bnode(data); //to be modified
+				newBlock --;
+			}
+		}
+	}
+	// /*
+	//  * Write data into block
+	//  */
+	TracePrintf(0, "WRITE: Writing data\n");
+	int cur = 0;
+	for (i = 0; i < NUM_DIRECT; i ++) {
+		//int blockDirect = inode->direct[i];
+		//if (blockDirect <= 0) 
+		if (start_pos >= cur && cur + BLOCKSIZE > start_pos ) break;
+		cur += BLOCKSIZE;
+	}
+
+	if (i < NUM_DIRECT) {
+		TracePrintf(0, "WRITE: write data into direct field, block number is %d\n", inode->direct[i]);
+		char *tmp = tempBuffer;
+		while(size > 0 && i < NUM_DIRECT) {
+			int blockDirect = inode->direct[i];
+			if (blockDirect > 0) {
+				int write_num;
+				TracePrintf(0, "WRITE: size to write is %d, block size is %d \n", size, BLOCKSIZE);
+				if (size < start_pos + BLOCKSIZE - cur) write_num = size;
+				else write_num = cur - start_pos + BLOCKSIZE;
+				void *block2write = getBlock(blockDirect);
+				TracePrintf(0, "WRITE: memcpy to the block, address is %d\n", block2write);
+				TracePrintf(0, "WRITE: start position is %d, now in %d\n", start_pos, cur);
+				memcpy(block2write + start_pos - cur, tmp, write_num);
+				TracePrintf(0, "WRITE: memcpy finished\n");
+				write_Bnode(blockDirect);
+				start_pos += write_num;
+				tmp += write_num;
+				size -= write_num;
+				cur += BLOCKSIZE;
+				TracePrintf(0, "WRITE: Finished writing the block\n");
+			}
+			i ++;
+		}
+		if (i >= NUM_DIRECT) {
+			TracePrintf(0, "WRITE: write data into direct and indirect field\n");
+			if (inode->indirect != 0) {
+				int blockIndirect = inode->indirect;
+				void *b = getBlock(blockIndirect);
+				int j = 0;
+				while (size > 0 && j < BLOCKSIZE) {
+					blockIndirect = *(int *)(b+j);
+					if (blockIndirect > 0) {
+						int writeCount;
+						if (size < cur + BLOCKSIZE - start_pos) writeCount = size;
+						else writeCount = cur - start_pos + BLOCKSIZE;
+						void *block2write = getBlock(blockIndirect);
+						memcpy(block2write + start_pos - cur, tmp, writeCount);
+						write_Bnode(block2write);
+
+						start_pos += writeCount;
+						size -=writeCount;
+						cur += BLOCKSIZE;
+						tmp += writeCount;
+					}
+					j +=4;
+				} 
+			}
+		}
+	} else {
+		TracePrintf(0, "WRITE: write data into indirect field\n");
+		if (inode -> indirect != 0) {
+			int blockNUM = inode->indirect;
+			void *indirectBlock = getBlock(blockNUM);
+			int j = 0;
+			for(j = 0; j < BLOCKSIZE; j += 4) {
+				blockNUM  = *(int*)(indirectBlock + j);
+				if (blockNUM != 0) {
+					if (cur <= start_pos && cur + BLOCKSIZE > start_pos) break;
+					cur+= BLOCKSIZE;
+				}
+			}
+			char *tmp = tempBuffer;
+			while (size > 0 && j < BLOCKSIZE) {
+				blockNUM = *(int *)(indirectBlock + j);
+				if (blockNUM > 0) {
+					int writeCount;
+					if (writeCount < cur + BLOCKSIZE - start_pos) writeCount = size;
+					else writeCount = cur + BLOCKSIZE - start_pos;
+					void *block2write = getBlock(blockNUM);
+					memcpy(block2write + start_pos - cur, tmp, writeCount);
+					write_Bnode(blockNUM);
+					start_pos += writeCount;
+					tmp += writeCount;
+					size -= writeCount;
+					cur += BLOCKSIZE;
+				}
+				j += 4;
+			}
+		}
+	}
+	TracePrintf(0, "WRITE: Finished writing handler, inode size 1 is %d\n", inode->size);
+	if (inode->size < start_pos) inode->size = start_pos;
+	TracePrintf(0, "WRITE: Finished writing handler, inode size 2 is %d\n", inode->size);
+	msg->data1 = start_pos - msg->data1;
+}
+
 /*
 * write all dirty inode to cached block and write all dirty blocks into disk
 */
 void sync_handler(my_msg *msg, int sender_pid) {
+	// TracePrintf(0,"sync_handler starts...");
+	// struct Nnode *tmp = Nhead;
+	// while(tmp != NULL) {
+	// 	TracePrintf(0,"sync_handler:write inode %d to block", tmp->inum);
+	// 	if (tmp->dirty == '1') {
+	// 		TracePrintf(0,"syn_handler: write inode %d", tmp->inum);
+	// 		write_inode_block(tmp->inum);
+	// 	}
+	// 	tmp = tmp->next;
+	// }
+	getInode(2);
+	TracePrintf(0, "size %d\n", Nsize);
+	TracePrintf(0, "head inum %d\n", Nhead->inum);
+	TracePrintf(0, "tead inum %d\n", Nhead->inum);
+	getInode(3);
+	TracePrintf(0, "head inum %d\n", Nhead->inum);
+	TracePrintf(0, "tead inum %d\n", Ntail->inum);
+	getInode(4);
+	TracePrintf(0, "head inum %d\n", Nhead->inum);
+	TracePrintf(0, "tead inum %d\n", Ntail->inum);
+	TracePrintf(0, "size %d\n", Nsize);
+	getInode(2);
+	TracePrintf(0, "head inum %d\n", Nhead->inum);
+	TracePrintf(0, "tead inum %d\n", Ntail->inum);
+	TracePrintf(0, "size %d\n", Nsize);
+
+	if (Nhead->next == NULL) TracePrintf(0,"fsdadjfskla");
+	// print the inode list
 	struct Nnode *tmp = Nhead;
-	while(tmp != NULL) {
-		if (tmp->dirty == '1') {
-			write_inode_block(tmp->inum);
-		}
+	int i = 0;
+	while(i<3) {
+		TracePrintf(0,"inum %d, dirtry %s\n", tmp->inum, tmp->dirty);
+		// if (tmp->dirty == '1') {
+		// 	TracePrintf(0,"syn_handler: write inode %d", tmp->inum);
+		// 	write_inode_block(tmp->inum);
+		// }
+
 		tmp = tmp->next;
 	}
-	struct Bnode *tmp2 = Btail;
+
+	TracePrintf(0, "syn_handler: wiret inode to block complete\n");
+	struct Bnode *tmp2 = Bhead;
 	while(tmp2 != NULL) {
+		TracePrintf(0, "syn_handler: block list index %d\n", tmp2->index);
 		if (tmp2->dirty == '1') {
+			TracePrintf(0,"syn_handler: write block %d\n", tmp2->index);
 			write_block_disk(tmp2->index);
 		}
 		tmp2 = tmp2->next;
 	}
+	// test for sync
+
 }
 
 void shutdown_handler(my_msg *msg, int sender_pid)
@@ -1411,10 +1917,10 @@ int main(int argc, char **argv) {
             case CREATE:
             	TracePrintf(0, "receive a create msg~~~~~~~~~~~~`\n");
                  create_handler(&msg,sender_pid);break;
-            // case READ:
-            //     read_handler(&msg,sender_pid);break;
-            // case WRITE:
-            //     write_handler(&msg,sender_pid);break;
+            case READ:
+                read_handler(&msg,sender_pid);break;
+            case WRITE:
+                write_handler(&msg,sender_pid);break;
             case LINK:
             	TracePrintf(0, "receive a link msg~~~~~~~~~~~~~~\n");
                 link_handler(&msg,sender_pid);break;
@@ -1449,7 +1955,7 @@ int main(int argc, char **argv) {
                 break;
         }
 
-        if (Reply(&msg,sender_pid)!=ERROR) fprintf(stderr, "successful replying to pid %d, data1 is %d\n",sender_pid, msg.data1);
+        if (Reply(&msg,sender_pid)==ERROR) fprintf(stderr, "fail replying to pid %d",sender_pid);
     }
     terminate();
 //         
