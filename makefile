@@ -27,7 +27,7 @@
 #	For example, the Makefile will make test1 out of test1.c,
 #	if you have a file named test1.c in this directory.
 #
-TEST = topen2 tlink tcreate tcreate2 writeread tsymlink tls 
+TEST = topen2 tlink tcreate tcreate2 writeread tsymlink tls sample1 sample2 tunlink2 selftest
 ALL = yfs iolib.a $(TEST)
 
 #

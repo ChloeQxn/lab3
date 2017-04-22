@@ -1,7 +1,52 @@
-The mkyfs.c program in this directory should be run under Unix/Linux,
-not under Yalnix.
+This is the lab3 project code 
+Group members:
+Xiangning Qi xq11
+Chunxiao Zhang cz31
 
-All other programs in this directory are some sample test programs
-you can run under Yalnix and YFS for Lab 3.
+**************************************************
 
-If you find any problems with these test programs, let me know.
+To run this file, undering the top-level directory, First initialize your DISK invironment, type in in command line:
+
+/clear/courses/cmop421/pub/bin/mkyfs
+
+**************************************************
+
+Before you run your test program, please input the name of your program into makefile:
+
+TEST = topen2 tlink tcreate tcreate2 writeread tsymlink 
+ALL = yfs iolib.a $(TEST)
+
+Please input the name of your test file after TEST, For example, if you want to run tls.c, please change make file to:
+
+TEST = topen2 tlink tcreate tcreate2 writeread tsymlink tls 
+ALL = yfs iolib.a $(TEST)
+
+**************************************************
+
+Before you run this program, we recommand you type the following in command line:
+
+make clean
+
+this is to clean some previous compiled files
+
+**************************************************
+
+Then you can compile, type the following in command line:
+
+make
+
+**************************************************
+
+Then, to run this program, type the following in command line:
+
+/clear/courses/comp421/pub/bin/yalnix -ly 5 yfs testprog
+
+The result is then shown in the command line
+
+**************************************************
+
+
+We used an external source to achieve Hash table. 
+The link is: https://github.com/troydhanson/uthash
+author is: troydhanson
+document can be seen on: http://troydhanson.github.io/uthash/

@@ -46,17 +46,16 @@ main()
 
 	status = Open("/b");
 	printf("open /b status %d\n", status);
-	Shutdown();
+	// Shutdown();
 
 	status = Unlink("/b");
 	printf("unLink /b status %d\n", status);
 
 	status = Open("/b");
 	printf("open /b status %d\n", status);
-	Shutdown();
 
 	status = Unlink("/a");
-	printf("Link status %d\n", status);
+	printf("unLink status %d\n", status);
 
 	status = Open("/a");
 	printf("open /a status %d\n", status);

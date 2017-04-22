@@ -41,7 +41,7 @@ int is_open(int inum) {
 }
 
 int Open(char *pathname) {
-	fprintf(stderr, "lib: OPEN\n");
+	// fprintf(stderr, "lib: OPEN\n");
 	initial();
 	// create msg to send
 	my_msg msg;
@@ -73,10 +73,11 @@ int Open(char *pathname) {
 		// fprintf(stderr, "fd error \n" );
 		return ERROR;
 		}
+		if (msg.data1==-1) return ERROR;
 		opened[fd].open = 1;
 		opened[fd].cur_pos = 0;
 		opened[fd].inum = msg.data1;
-		fprintf(stderr, "lib open: inode number is %d\n", opened[fd].inum);
+		// fprintf(stderr, "lib open: inode number is %d\n", opened[fd].inum);
 	}
 	return fd;
 }
@@ -86,7 +87,7 @@ int Open(char *pathname) {
 *
 */
 int Create(char *pathname) {
-	fprintf(stderr, "CREATE\n");
+	// fprintf(stderr, "CREATE\n");
 	initial();
 	// create the create msg
 	my_msg msg;
@@ -116,7 +117,7 @@ int Create(char *pathname) {
         perror("error sending create message");
         return ERROR;
     }
-    fprintf(stderr, "CREATE REPLY\n");
+    // fprintf(stderr, "CREATE REPLY\n");
     // receive the return msg
     if (msg.type == CREATE) {
     	if (msg.data1 == -1) return ERROR;
@@ -124,7 +125,7 @@ int Create(char *pathname) {
 		opened[fd].cur_pos = 0;
 		opened[fd].inum = msg.data1;
     }
-    fprintf(stderr, "fd of %d is %d\n", fd, opened[fd].inum);
+    // fprintf(stderr, "fd of %d is %d\n", fd, opened[fd].inum);
 	return fd;
 }
 /*

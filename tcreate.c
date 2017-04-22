@@ -8,14 +8,14 @@
 int
 main()
 {
-    // int err;
-    // write(2, "A\n", 2);
-    // err = Create("/foo");
-    // fprintf(stderr, "Create returned %d\n", err);
+    int err;
+    write(2, "A\n", 2);
+    err = Create("/foo");
+    fprintf(stderr, "Create returned %d\n", err);
 
     Sync();
-    // Delay(3);
-    // fprintf(stderr, "Done with Sync\n");
+    Delay(3);
+    fprintf(stderr, "Done with Sync\n");
 
 /*	Shutdown(); */
 

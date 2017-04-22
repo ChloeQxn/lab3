@@ -96,12 +96,12 @@ return s;
 // add inode into hashtable
 void add_inode(int ikey, struct Nnode* node) {  
     struct my_struct *s;  
-    HASH_FIND_INT(inodeHash, &ikey, s);  /* 插入前先查看key值是否已经在hash表inodeHash里面了 */  
+    HASH_FIND_INT(inodeHash, &ikey, s);  
     if (s==NULL) {  
       s = (struct my_struct*)malloc(sizeof(struct my_struct));  
       s->ikey = ikey; 
       s->node = node; 
-      HASH_ADD_INT(inodeHash, ikey, s );  /* 这里必须明确告诉插入函数，自己定义的hash结构体中键变量的名字 */  
+      HASH_ADD_INT(inodeHash, ikey, s );    
     }  
     // strcpy(s-> value, value_buf);  
 } 
@@ -109,12 +109,12 @@ void add_inode(int ikey, struct Nnode* node) {
 // add inode into hashtable
 void add_block(int ikey, struct Bnode* node) {  
     struct my_struct2 *s;  
-    HASH_FIND_INT(blockHash, &ikey, s);  /* 插入前先查看key值是否已经在hash表inodeHash里面了 */  
+    HASH_FIND_INT(blockHash, &ikey, s); 
     if (s==NULL) {  
       s = (struct my_struct2*)malloc(sizeof(struct my_struct2));  
       s->ikey = ikey; 
       s->node = node; 
-      HASH_ADD_INT(blockHash, ikey, s );  /* 这里必须明确告诉插入函数，自己定义的hash结构体中键变量的名字 */  
+      HASH_ADD_INT(blockHash, ikey, s );  
     }  
     // strcpy(s-> value, value_buf);  
 } 
@@ -657,8 +657,8 @@ int path_file_helper(char *pathname,int len_name, int curr_index, int curr_inum,
 		memcpy(symname, getBlock(node->direct[0]), size);
 		TracePrintf(0, "path_file_helper: print the as is name of symlink %s\n", symname);
 		memcpy(symname+size, pathname+curr_index, len_name-curr_index);
-		TracePrintf(0, "path_file_helper: print the pathname after update\n");
-		return path_file_helper(pathname, strlen(pathname), 0, curr_inum, num_slink);
+		TracePrintf(0, "path_file_helper: print the pathname after update %s\n", symname);
+		return path_file_helper(symname, strlen(symname), 0, curr_inum, num_slink);
 	}
 	return path_file_helper(pathname, len_name, curr_index, curr_inum, num_slink);
 }
@@ -692,6 +692,7 @@ struct my_comp *get_parent(char *pathname, int curr_inum) {
 
 	
 	// if parent inum do not exist or parent is not a dir, return error
+	TracePrintf(0,"paretn inum is %d, tyoe is %d\n", par_inum, getInode(par_inum)->type);
 	if (par_inum <= 0 || getInode(par_inum)->type != INODE_DIRECTORY) {
 		TracePrintf(0,"get_parent: the paretn is not a dir.\n");
 		tmp->par_inum = -1;
@@ -1834,6 +1835,13 @@ void sync_handler(my_msg *msg, int sender_pid) {
 		}
 		tmp2 = tmp2->next;
 	}
+
+	// test for sync
+	// int i = 1;
+	// for (;i<3;i++) {
+	// 	struct inode *node = get_inode_disk(i);
+	// 	TracePrintf(0,"%d,%d",node->type, node->size);
+	// }
 	TracePrintf(0,"sync_handler ends.\n");
 
 }
